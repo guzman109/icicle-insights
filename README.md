@@ -138,8 +138,7 @@ Code formatting is enforced via `.clang-format` and static analysis via `.clang-
 ## Documentation
 
 - [Architecture Guide](docs/architecture.md) - Detailed architecture and design decisions
-- [Build System Guide](docs/dev-guide/build-system.md) - CMake and Conan details
-- [CLAUDE.md](CLAUDE.md) - Project instructions for AI assistants
+- [CLAUDE.md](CLAUDE.md) - Project instructions for AI assistants and build system details
 
 ## Dependencies
 

@@ -42,9 +42,9 @@ CMakePresets.json
 # Logs
 *.log
 
-# Core dumps
-core
-core.*
+# Core dumps (only in root directory)
+/core
+/core.*
 
 # Claude Code
 .claude_code/

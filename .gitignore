@@ -1,0 +1,47 @@
+# Build directories
+build/
+
+# Environment variables
+.env
+.env.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+cmake_install.cmake
+compile_commands.json
+Makefile
+CTestTestfile.cmake
+_deps/
+
+# Conan
+conaninfo.txt
+conanbuildinfo.*
+conan.lock
+
+# Logs
+*.log
+
+# Core dumps
+core
+core.*
+
+# Claude Code
+.claude_code/
+.clinerules

@@ -32,7 +32,6 @@ int main() {
   if (!insights::git::registerRoutes(GitRouter, Database.value())) {
     spdlog::error("Failed registering git routes.");
   }
-  Router.print_tree();
 
   Server.value()->mount("/api/git", GitRouter);
 

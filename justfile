@@ -1,8 +1,8 @@
 # https://just.systems
 # CMake build system
 
-set dotenv-load
-set export
+set dotenv-load := true
+set export := true
 
 default:
     @just --list

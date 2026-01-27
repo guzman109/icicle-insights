@@ -162,7 +162,7 @@ docker run -p 3000:3000 --env-file .env icicle-insights
 
 ## License
 
-[Add your license here]
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Contributing
 

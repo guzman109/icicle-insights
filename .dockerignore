@@ -1,0 +1,63 @@
+# Build directories
+build/
+.cmake/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Environment files
+.env
+.env.*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake generated files
+CMakePresets.json
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+CTestTestfile.cmake
+_deps/
+
+# Claude Code
+.claude_code/
+.clinerules
+CLAUDE.md
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development tools
+justfile
+.clang-format
+.clang-tidy
+
+# Tests
+test/
+tests/
+
+# Conan local cache
+conan.lock
+conaninfo.txt
+conanbuildinfo.*
+
+# Logs
+*.log
+
+# Docker itself
+Dockerfile*
+docker-compose*.yml
+.dockerignore

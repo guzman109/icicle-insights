@@ -1,0 +1,55 @@
+### 
+
+@baseUrl = http://localhost:3000
+
+
+### Get all repos
+
+GET {{baseUrl}}/api/git/repos HTTP/1.1
+Accept: application/json
+
+
+### 
+
+
+### Create a repo
+
+POST {{baseUrl}}/api/git/repos HTTP/1.1
+Content-Type: application/json
+
+{
+  "Name": "kitty",
+  "Clones": 0,
+  "Followers": 0,
+  "Forks": 0,
+  "Stars": 0,
+  "Views": 0,
+  "Watchers": 0
+}
+
+
+### 
+
+@repoId = 365697de-d510-4fba-bc31-61e7ff24679f
+### Get a repo
+GET {{baseUrl}}/api/git/repos/{{repoId}} HTTP/1.1
+Content-Type: application/json
+
+### Update a repo
+PATCH {{baseUrl}}/api/git/repos/{{repoId}} HTTP/1.1
+Content-Type: application/json
+
+{
+  "Clones": 100,
+  "Followers": 50,
+  "Forks": 25,
+  "Stars": 200,
+  "Views": 500,
+  "Watchers": 75
+}
+
+### Delete a repo
+DELETE {{baseUrl}}/api/git/repos/{{repoId}} HTTP/1.1
+
+###
+

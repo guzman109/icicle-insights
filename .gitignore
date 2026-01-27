@@ -1,5 +1,6 @@
 # Build directories
 build/
+.cmake/
 
 # Environment variables
 .env
@@ -12,6 +13,7 @@ build/
 *.swo
 *~
 .DS_Store
+.cache/
 
 # Compiled binaries
 *.o
@@ -19,6 +21,7 @@ build/
 *.so
 *.dylib
 *.exe
+*.out
 
 # CMake generated files
 CMakeCache.txt
@@ -34,6 +37,7 @@ _deps/
 conaninfo.txt
 conanbuildinfo.*
 conan.lock
+CMakePresets.json
 
 # Logs
 *.log

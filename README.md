@@ -9,7 +9,7 @@ ICICLE Insights tracks repositories, accounts, and platform-level statistics acr
 - **Git Platforms**: stars, forks, clones, views, watchers, followers
 - **Container Registries**: pulls, stars
 
-The project manages ~500 ICICLE components across different research thrusts:
+The project tracks ICICLE components across different research thrusts:
 - AI4CI (AI for Cyberinfrastructure)
 - FoundationAI
 - CI4AI (Cyberinfrastructure for AI)

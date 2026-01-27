@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ICICLE Insights is a C++23 HTTP server that collects and stores metrics about ICICLE project components from various platforms (Git hosting services and container registries). It tracks repositories, accounts, and platform-level statistics like stars, forks, clones, views, and watchers.
 
-The project references a components.json file containing ~500 ICICLE components across different research thrusts (AI4CI, FoundationAI, CI4AI, Software, and use-inspired domains like Digital Agriculture, Smart Foodsheds, and Animal Ecology).
+The project references a components.json file containing ICICLE components across different research thrusts (AI4CI, FoundationAI, CI4AI, Software, and use-inspired domains like Digital Agriculture, Smart Foodsheds, and Animal Ecology).
 
 ## Build System
 

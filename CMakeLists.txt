@@ -9,9 +9,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Glaze Dev Build (FetchContent for testing new features)
+include(FetchContent)
+
+fetchcontent_declare(
+  glaze
+  GIT_REPOSITORY https://github.com/stephenberry/glaze.git
+  GIT_TAG tls_http_client
+  GIT_SHALLOW TRUE
+)
+
+fetchcontent_makeavailable(glaze)
+
 # Find Conan-provided dependencies
 find_package(asio REQUIRED)
-find_package(glaze REQUIRED)
 find_package(PostgreSQL REQUIRED)
 find_package(libpqxx REQUIRED)
 find_package(spdlog REQUIRED)

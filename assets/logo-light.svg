@@ -1,8 +1,8 @@
-<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1029.21 289.01">
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 289.01">
   <defs>
     <style>
-      .cls-1{fill:#000;font-family:Montserrat, sans-serif;font-size:120px;font-weight:700;}
-      .cls-subtitle{fill:#000;font-family:Montserrat, sans-serif;font-size:28px;font-weight:400;letter-spacing:2px;}
+      .cls-1{fill:#000;font-family:Montserrat, sans-serif;font-size:110px;font-weight:700;}
+      .cls-subtitle{fill:#000;font-family:Montserrat, sans-serif;font-size:26px;font-weight:400;letter-spacing:2px;}
       .cls-2{stroke-width:7.79px;}
       .cls-2,.cls-3,.cls-4{fill:none;stroke:#000;stroke-linecap:round;stroke-miterlimit:10;}
       .cls-3{stroke-width:12px;}
@@ -35,10 +35,10 @@
   <circle class="cls-2" cx="250.4" cy="211.14" r="14.57"/>
 
   <!-- Updated text -->
-  <text class="cls-1" transform="translate(360, 160)">
+  <text class="cls-1" transform="translate(350, 150)">
     <tspan x="0" y="0">ICICLE Insights</tspan>
   </text>
-  <text class="cls-subtitle" transform="translate(360, 200)">
+  <text class="cls-subtitle" transform="translate(350, 185)">
     <tspan x="0" y="0">Metrics Collection Platform</tspan>
   </text>
 </svg>

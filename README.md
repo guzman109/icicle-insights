@@ -1,10 +1,27 @@
-# ICICLE Insights
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/logo-light.svg">
+    <img src="assets/logo-light.svg" alt="ICICLE Insights Logo" width="700"/>
+  </picture>
 
-A high-performance C++23 HTTP server that collects and stores metrics about ICICLE project components from various platforms including Git hosting services (GitHub, GitLab) and container registries (DockerHub, Quay.io).
+  <p><strong>A high-performance C++23 HTTP server for collecting and storing metrics about ICICLE project components</strong></p>
+
+  <p>
+    <a href="#features">Features</a> •
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#api-endpoints">API</a> •
+    <a href="#documentation">Documentation</a>
+  </p>
+</div>
+
+---
 
 ## Overview
 
-ICICLE Insights tracks repositories, accounts, and platform-level statistics across the ICICLE research project ecosystem, monitoring metrics such as:
+ICICLE Insights tracks repositories, accounts, and platform-level statistics across various platforms including Git hosting services (GitHub, GitLab) and container registries (DockerHub, Quay.io).
+
+The system monitors metrics across the ICICLE research project ecosystem:
 
 - **Git Platforms**: stars, forks, clones, views, watchers, followers
 - **Container Registries**: pulls, stars
@@ -19,10 +36,12 @@ The project tracks ICICLE components across different research thrusts:
 ## Features
 
 - **Modern C++23** implementation with `std::expected` for error handling
-- **Async I/O** using asio for high performance
+- **Async I/O** using ASIO for high performance
+- **Background task scheduler** for periodic metric collection from Git platforms
 - **Type-safe database operations** with PostgreSQL via libpqxx
 - **RESTful API** with JSON serialization using glaze
 - **Generic CRUD operations** using templates and traits
+- **Non-blocking architecture** with thread pool for background tasks
 - **Docker support** for easy deployment
 
 ## Prerequisites
@@ -69,6 +88,8 @@ just run     # Run the server
 
 The server will start on `http://localhost:3000`.
 
+The background task scheduler will automatically run every 2 weeks to update Git platform metrics. See [docs/async-task-patterns.md](docs/async-task-patterns.md) for details on the async architecture.
+
 ## API Endpoints
 
 ### Platforms
@@ -104,13 +125,17 @@ The server will start on `http://localhost:3000`.
 ├── include/          # Header files
 │   ├── core/         # Foundation utilities
 │   ├── db/           # Database layer
-│   ├── git/          # Git platform models and routing
+│   ├── git/          # Git platform models, routing, and tasks
+│   │   ├── models.hpp      # Data models
+│   │   ├── router.hpp      # HTTP route handlers
+│   │   ├── tasks.hpp       # Background task pipeline
+│   │   └── scheduler.hpp   # Periodic task scheduler
 │   ├── containers/   # Container registry models
 │   └── server/       # HTTP server
 ├── src/              # Implementation files
-│   ├── git/          # Git route handlers
+│   ├── git/          # Git route handlers and task implementations
 │   ├── server/       # Server implementation
-│   └── main.cpp      # Entry point
+│   └── insights.cpp  # Entry point
 ├── docs/             # Documentation
 ├── tests/            # Test files (HTTP client tests)
 └── data/             # Component data and fixtures
@@ -138,6 +163,7 @@ Code formatting is enforced via `.clang-format` and static analysis via `.clang-
 ## Documentation
 
 - [Architecture Guide](docs/architecture.md) - Detailed architecture and design decisions
+- [Async Task Patterns](docs/async-task-patterns.md) - Background task scheduling and async patterns
 - [CLAUDE.md](CLAUDE.md) - Project instructions for AI assistants and build system details
 
 ## Dependencies

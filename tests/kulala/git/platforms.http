@@ -1,6 +1,6 @@
-### 
+###
 
-@baseUrl = http://localhost:3000
+@baseUrl = http://{{KULALA_HOST}}:{{KULALA_PORT}}
 
 
 ### Get all platforms

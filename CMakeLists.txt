@@ -29,12 +29,13 @@ find_package(spdlog REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 file(GLOB git_SRC src/git/*.cpp)
+file(GLOB server_SRC src/server/*.cpp)
 
 # Executable
 add_executable(${PROJECT_NAME}
-    src/main.cpp
+    src/insights.cpp
     ${git_SRC}
-    src/server/server.cpp
+    ${server_SRC}
 )
 
 # Include directories

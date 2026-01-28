@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdlib>
+#include <expected>
 #include <optional>
 #include <string>
 
@@ -10,20 +11,35 @@ namespace insights::core {
 struct Config {
   std::string DatabaseUrl;
   std::string GitHubToken;
+  std::string Host{"127.0.0.1"};
+  int Port = 3000;
 
   static insights::core::Result<Config> load() {
-    auto *DatabaseUrl = std::getenv("DATABASE_URL");
-    auto *GitHubToken = std::getenv("GITHUB_TOKEN");
+    auto *DatabaseUrlEnv = std::getenv("DATABASE_URL");
+    auto *GitHubTokenEnv = std::getenv("GITHUB_TOKEN");
+    auto *HostEnv = std::getenv("HOST");
+    auto *PortEnv = std::getenv("PORT");
 
-    if (DatabaseUrl == nullptr) {
+    if (DatabaseUrlEnv == nullptr) {
       return std::unexpected(Error{"DATABASE_URL is required"});
     }
 
-    if (GitHubToken == nullptr) {
+    if (GitHubTokenEnv == nullptr) {
       return std::unexpected(Error{"GITHUB_TOKEN is required"});
     }
 
-    return Config{.DatabaseUrl = DatabaseUrl, .GitHubToken = GitHubToken};
+    std::string Host = "127.0.0.1";
+    if (HostEnv != nullptr) {
+      Host = HostEnv;
+    }
+
+    int Port = 3000;
+    if (PortEnv != nullptr) {
+      Port = std::stoi(PortEnv);
+    }
+
+    return Config{.DatabaseUrl = DatabaseUrlEnv, .GitHubToken = GitHubTokenEnv,
+                  .Host = Host, .Port = Port};
   }
 };
 

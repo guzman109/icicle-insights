@@ -1,0 +1,21 @@
+###
+
+@baseUrl = http://{{KULALA_HOST}}:{{KULALA_PORT}}
+
+### Health Check - Verify database connectivity
+
+GET {{baseUrl}}/health HTTP/1.1
+Accept: application/json
+
+
+###
+
+
+### List all available routes
+
+GET {{baseUrl}}/routes HTTP/1.1
+Accept: application/json
+
+
+###
+

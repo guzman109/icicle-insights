@@ -1,11 +1,12 @@
 #pragma once
+#include <exception>
+#include <expected>
 #include <format>
 #include <memory>
 #include <pqxx/pqxx>
 #include <pqxx/zview>
+#include <spdlog/spdlog.h>
 #include <string>
-#include <exception>
-#include <expected>
 #include <utility>
 
 #include "core/result.hpp"
@@ -15,18 +16,24 @@ namespace insights::db {
 struct Database {
   pqxx::connection Cx;
 
+  explicit Database(const std::string &ConnString) : Cx(ConnString) {}
+
   static core::Result<std::shared_ptr<Database>>
   connect(const std::string &ConnString) {
     try {
-      return std::shared_ptr<Database>(
-          new Database{pqxx::connection(ConnString.c_str())});
+      spdlog::debug("Database::connect - Establishing connection");
+      auto Db = std::make_shared<Database>(ConnString);
+      spdlog::info("Database::connect - Successfully connected to database");
+      return Db;
     } catch (const std::exception &Err) {
+      spdlog::error("Database::connect - Connection failed: {}", Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }
 
   template <core::DbEntity T> core::Result<T> create(const T &Entity) {
     try {
+      spdlog::trace("Database::create<{}> - Starting transaction", core::DbTraits<T>::TableName);
       pqxx::work Tx(Cx);
       auto Params = core::DbTraits<T>::toParams(Entity);
 
@@ -39,6 +46,8 @@ struct Database {
                                core::DbTraits<T>::TableName,
                                core::DbTraits<T>::Columns, PlaceHolders);
 
+      spdlog::trace("Database::create<{}> - Query: {}", core::DbTraits<T>::TableName, Query);
+
       pqxx::result Res;
       std::apply(
           [&](auto &&...Args) {
@@ -47,15 +56,18 @@ struct Database {
           Params);
 
       Tx.commit();
+      spdlog::trace("Database::create<{}> - Successfully created entity", core::DbTraits<T>::TableName);
 
       return core::DbTraits<T>::fromRow(Res[0]);
     } catch (const std::exception &Err) {
+      spdlog::error("Database::create<{}> - Failed: {}", core::DbTraits<T>::TableName, Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }
 
   template <core::DbEntity T> core::Result<T> get(const std::string &Id) {
     try {
+      spdlog::trace("Database::get<{}> - Fetching entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);
 
       auto Query = std::format("SELECT * FROM {} WHERE id = $1",
@@ -64,17 +76,21 @@ struct Database {
       auto Result = Tx.exec(pqxx::zview{Query}, pqxx::params{Id});
 
       if (Result.empty()) {
+        spdlog::debug("Database::get<{}> - Entity not found: {}", core::DbTraits<T>::TableName, Id);
         return std::unexpected(core::Error{"Not found"});
       }
 
+      spdlog::trace("Database::get<{}> - Successfully retrieved entity", core::DbTraits<T>::TableName);
       return core::DbTraits<T>::fromRow(Result[0]);
     } catch (const std::exception &Err) {
+      spdlog::error("Database::get<{}> - Failed: {}", core::DbTraits<T>::TableName, Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }
 
   template <core::DbEntity T> core::Result<T> remove(const std::string &Id) {
     try {
+      spdlog::trace("Database::remove<{}> - Soft deleting entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);
 
       auto Query = std::format(
@@ -84,14 +100,17 @@ struct Database {
       auto Res = Tx.exec(pqxx::zview(Query), pqxx::params{Id});
 
       Tx.commit();
+      spdlog::trace("Database::remove<{}> - Successfully soft deleted entity", core::DbTraits<T>::TableName);
       return core::DbTraits<T>::fromRow(Res[0]);
     } catch (const std::exception &Err) {
+      spdlog::error("Database::remove<{}> - Failed: {}", core::DbTraits<T>::TableName, Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }
 
   template <core::DbEntity T> core::Result<T> update(const T &Entity) {
     try {
+      spdlog::trace("Database::update<{}> - Updating entity with ID: {}", core::DbTraits<T>::TableName, Entity.Id);
       pqxx::work Tx(Cx);
       auto Params = core::DbTraits<T>::toParams(Entity);
 
@@ -108,14 +127,17 @@ struct Database {
           Params);
 
       Tx.commit();
+      spdlog::trace("Database::update<{}> - Successfully updated entity", core::DbTraits<T>::TableName);
       return core::DbTraits<T>::fromRow(Res[0]);
     } catch (const std::exception &Err) {
+      spdlog::error("Database::update<{}> - Failed: {}", core::DbTraits<T>::TableName, Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }
 
   template <core::DbEntity T> core::Result<std::vector<T>> getAll() {
     try {
+      spdlog::trace("Database::getAll<{}> - Fetching all entities", core::DbTraits<T>::TableName);
       pqxx::work Tx(Cx);
       auto Query =
           std::format("SELECT * FROM {}", core::DbTraits<T>::TableName);
@@ -123,6 +145,7 @@ struct Database {
       auto Res = Tx.exec(pqxx::zview(Query));
 
       if (Res.empty()) {
+        spdlog::debug("Database::getAll<{}> - No entities found", core::DbTraits<T>::TableName);
         return std::unexpected(core::Error{"Not found"});
       }
 
@@ -131,9 +154,12 @@ struct Database {
         Results.push_back(core::DbTraits<T>::fromRow(Row));
       }
 
+      spdlog::trace("Database::getAll<{}> - Successfully retrieved {} entities",
+                    core::DbTraits<T>::TableName, Results.size());
       return Results;
 
     } catch (const std::exception &Err) {
+      spdlog::error("Database::getAll<{}> - Failed: {}", core::DbTraits<T>::TableName, Err.what());
       return std::unexpected(core::Error{Err.what()});
     }
   }

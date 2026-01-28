@@ -23,16 +23,17 @@ registerReposRoutes(glz::http_router &Router,
 
   Router.get("/repos",
              [Database](const glz::request &Request, glz::response &Response) {
-               // Get all instances
+               spdlog::debug("GET /repos - Fetching all repositories");
                auto DbResponse = Database->getAll<git::models::Repository>();
 
                if (!DbResponse) {
+                 spdlog::error("GET /repos - Database error: {}", DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
-                     .json({"Error", "Error retrieving data from database."});
+                     .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               // Structure data for output.
+               spdlog::debug("GET /repos - Retrieved {} repositories", DbResponse.value().size());
                std::vector<git::OutputRepositorySchema> Output;
                for (const auto &Repository : DbResponse.value()) {
                  Output.emplace_back(OutputRepositorySchema{
@@ -56,12 +57,14 @@ registerReposRoutes(glz::http_router &Router,
                                    glz::response &Response) {
     CreateRepositorySchema RepositoryData;
     if (auto JsonError = glz::read_json(RepositoryData, Request.body)) {
+      spdlog::warn("POST /repos - Invalid JSON in request body");
       Response.status(static_cast<int>(BadRequest))
           .json({{"error", "Invalid JSON"}});
       return;
     }
     std::ranges::transform(RepositoryData.Name, RepositoryData.Name.begin(),
                            [](unsigned char Ch) { return std::tolower(Ch); });
+    spdlog::debug("POST /repos - Creating repository '{}'", RepositoryData.Name);
     git::models::Repository RepositoryToCreate{
         .Name = RepositoryData.Name,
         .AccountId = RepositoryData.AccountId,
@@ -74,12 +77,14 @@ registerReposRoutes(glz::http_router &Router,
 
     auto DbResponse = Database->create(RepositoryToCreate);
     if (!DbResponse) {
-      spdlog::error("Failed to create repository '{}': {}", RepositoryData.Name,
-                    DbResponse.error().Message);
+      spdlog::error("POST /repos - Failed to create repository '{}': {}",
+                    RepositoryData.Name, DbResponse.error().Message);
       Response.status(static_cast<int>(InternalServerError))
-          .json({"Error", "Error commiting data to database."});
+          .json({{"error", DbResponse.error().Message}});
       return;
     }
+    spdlog::info("POST /repos - Created repository '{}' with ID: {}",
+                 DbResponse.value().Name, DbResponse.value().Id);
     auto Output =
         OutputRepositorySchema{.Id = DbResponse.value().Id,
                                .Name = DbResponse.value().Name,
@@ -96,12 +101,15 @@ registerReposRoutes(glz::http_router &Router,
   Router.get("/repos/:id",
              [Database](const glz::request &Request, glz::response &Response) {
                auto Id = Request.params.at("id");
+               spdlog::debug("GET /repos/{} - Fetching repository", Id);
                auto DbResponse = Database->get<git::models::Repository>(Id);
                if (!DbResponse) {
+                 spdlog::error("GET /repos/{} - Database error: {}", Id, DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
-                     .json({"Error", "Error retrieving data from database."});
+                     .json({{"error", DbResponse.error().Message}});
                  return;
                }
+               spdlog::debug("GET /repos/{} - Found repository '{}'", Id, DbResponse.value().Name);
                auto Output = OutputRepositorySchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
@@ -122,16 +130,19 @@ registerReposRoutes(glz::http_router &Router,
       [Database](const glz::request &Request, glz::response &Response) {
         UpdateSchema RepositoryData;
         if (auto JsonError = glz::read_json(RepositoryData, Request.body)) {
+          spdlog::warn("PATCH /repos/:id - Invalid JSON in request body");
           Response.status(static_cast<int>(BadRequest))
               .json({{"error", "Invalid JSON"}});
           return;
         }
 
         auto Id = Request.params.at("id");
+        spdlog::debug("PATCH /repos/{} - Updating repository", Id);
         auto DbResponse = Database->get<git::models::Repository>(Id);
         if (!DbResponse) {
+          spdlog::error("PATCH /repos/{} - Database error: {}", Id, DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
-              .json({"Error", "Error retrieving data from database."});
+              .json({{"error", DbResponse.error().Message}});
           return;
         }
 
@@ -147,11 +158,13 @@ registerReposRoutes(glz::http_router &Router,
         // Commit changes
         DbResponse = Database->update(Repository);
         if (!DbResponse) {
+          spdlog::error("PATCH /repos/{} - Failed to update: {}", Id, DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
-              .json({"Error", "Error retrieving data from database."});
+              .json({{"error", DbResponse.error().Message}});
           return;
         }
 
+        spdlog::info("PATCH /repos/{} - Updated repository '{}'", Id, DbResponse.value().Name);
         auto Output =
             OutputRepositorySchema{.Id = DbResponse.value().Id,
                                    .Name = DbResponse.value().Name,
@@ -169,13 +182,16 @@ registerReposRoutes(glz::http_router &Router,
   Router.del("/repos/:id",
              [Database](const glz::request &Request, glz::response &Response) {
                auto Id = Request.params.at("id");
+               spdlog::debug("DELETE /repos/{} - Soft deleting repository", Id);
                auto DbResponse = Database->remove<git::models::Repository>(Id);
                if (!DbResponse) {
+                 spdlog::error("DELETE /repos/{} - Database error: {}", Id, DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
-                     .json({"Error", "Error deleting data from database."});
+                     .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
+               spdlog::info("DELETE /repos/{} - Deleted repository '{}'", Id, DbResponse.value().Name);
                auto Output = OutputRepositorySchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,

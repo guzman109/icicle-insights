@@ -13,4 +13,4 @@ parseTimestamp(const std::string &Str) {
   Ss >> std::get_time(&Tm, "%Y-%m-%d %H:%M:%S");
   return std::chrono::system_clock::from_time_t(std::mktime(&Tm));
 }
-} // namespace insights::git::models::detail
+} // namespace insights::core

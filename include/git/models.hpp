@@ -6,9 +6,8 @@
 #include <string>
 #include <string_view>
 
-#include "core/traits.hpp"
 #include "core/timestamp.hpp"
-
+#include "core/traits.hpp"
 
 namespace insights::git::models {
 
@@ -83,10 +82,8 @@ template <> struct DbTraits<git::models::Platform> {
         .Stars = Row["stars"].as<int32_t>(),
         .Views = Row["views"].as<int64_t>(),
         .Watchers = Row["watchers"].as<int32_t>(),
-        .CreatedAt = core::parseTimestamp(
-            Row["created_at"].as<std::string>()),
-        .UpdatedAt = core::parseTimestamp(
-            Row["updated_at"].as<std::string>()),
+        .CreatedAt = core::parseTimestamp(Row["created_at"].as<std::string>()),
+        .UpdatedAt = core::parseTimestamp(Row["updated_at"].as<std::string>()),
         .DeletedAt = Row["deleted_at"].is_null()
                          ? std::nullopt
                          : std::optional{core::parseTimestamp(
@@ -122,10 +119,8 @@ template <> struct DbTraits<git::models::Account> {
         .Stars = Row["stars"].as<int32_t>(),
         .Views = Row["views"].as<int64_t>(),
         .Watchers = Row["watchers"].as<int32_t>(),
-        .CreatedAt = core::parseTimestamp(
-            Row["created_at"].as<std::string>()),
-        .UpdatedAt = core::parseTimestamp(
-            Row["updated_at"].as<std::string>()),
+        .CreatedAt = core::parseTimestamp(Row["created_at"].as<std::string>()),
+        .UpdatedAt = core::parseTimestamp(Row["updated_at"].as<std::string>()),
         .DeletedAt = Row["deleted_at"].is_null()
                          ? std::nullopt
                          : std::optional{core::parseTimestamp(
@@ -162,10 +157,8 @@ template <> struct DbTraits<git::models::Repository> {
         .Stars = Row["stars"].as<int32_t>(),
         .Views = Row["views"].as<int64_t>(),
         .Watchers = Row["watchers"].as<int32_t>(),
-        .CreatedAt = core::parseTimestamp(
-            Row["created_at"].as<std::string>()),
-        .UpdatedAt = core::parseTimestamp(
-            Row["updated_at"].as<std::string>()),
+        .CreatedAt = core::parseTimestamp(Row["created_at"].as<std::string>()),
+        .UpdatedAt = core::parseTimestamp(Row["updated_at"].as<std::string>()),
         .DeletedAt = Row["deleted_at"].is_null()
                          ? std::nullopt
                          : std::optional{core::parseTimestamp(

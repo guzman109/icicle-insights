@@ -67,9 +67,15 @@ cd icicle-insights
 Create a `.env` file:
 
 ```bash
+# Required
 DATABASE_URL=postgresql://user:password@localhost:5432/icicle_insights
 GITHUB_TOKEN=your_github_token
 TAPIS_TOKEN=your_tapis_token
+
+# Optional
+HOST=127.0.0.1         # Server host (default: 127.0.0.1)
+PORT=3000              # Server port (default: 3000)
+LOG_LEVEL=info         # Log level: trace, debug, info, warn, error (default: info)
 ```
 
 ### 3. Build and run
@@ -91,6 +97,11 @@ The server will start on `http://localhost:3000`.
 The background task scheduler will automatically run every 2 weeks to update Git platform metrics. See [docs/async-task-patterns.md](docs/async-task-patterns.md) for details on the async architecture.
 
 ## API Endpoints
+
+### Core
+
+- `GET /health` - Health check endpoint (verifies database connectivity)
+- `GET /routes` - Lists all available API endpoints
 
 ### Platforms
 

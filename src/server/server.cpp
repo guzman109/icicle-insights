@@ -18,11 +18,11 @@ initServer(std::string Address, int Port) {
 }
 
 core::Result<void> startServer(glz::http_server<false> &Server,
+                               std::string Address, int Port,
                                std::optional<int> Workers) {
   try {
-    spdlog::info("Starting {} worker threads.",
-                 Workers.has_value() ? Workers.value() : 1);
     Server.start(Workers.value_or(1));
+    spdlog::info("Server ready and listening on http://{}:{}", Address, Port);
     Server.wait_for_signal();
     return {};
   } catch (...) {

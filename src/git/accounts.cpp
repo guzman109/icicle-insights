@@ -12,7 +12,7 @@
 
 namespace insights::git {
 
-core::Result<void>
+std::expected<void, core::Error>
 registerAccountsRoutes(glz::http_router &Router,
                        std::shared_ptr<db::Database> &Database) {
 
@@ -27,25 +27,22 @@ registerAccountsRoutes(glz::http_router &Router,
                auto DbResponse = Database->getAll<git::models::Account>();
 
                if (!DbResponse) {
-                 spdlog::error("GET /accounts - Database error: {}", DbResponse.error().Message);
+                 spdlog::error("GET /accounts - Database error: {}",
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::debug("GET /accounts - Retrieved {} accounts", DbResponse.value().size());
+               spdlog::debug("GET /accounts - Retrieved {} accounts",
+                             DbResponse.value().size());
                std::vector<git::OutputAccountSchema> Output;
                for (const auto &Account : DbResponse.value()) {
                  Output.emplace_back(OutputAccountSchema{
                      .Id = Account.Id,
                      .Name = Account.Name,
                      .PlatformId = Account.PlatformId,
-                     .Clones = Account.Clones,
                      .Followers = Account.Followers,
-                     .Forks = Account.Forks,
-                     .Stars = Account.Stars,
-                     .Views = Account.Views,
-                     .Watchers = Account.Watchers,
                  });
                }
 
@@ -65,14 +62,11 @@ registerAccountsRoutes(glz::http_router &Router,
     std::ranges::transform(AccountData.Name, AccountData.Name.begin(),
                            [](unsigned char Ch) { return std::tolower(Ch); });
     spdlog::debug("POST /accounts - Creating account '{}'", AccountData.Name);
-    git::models::Account AccountToCreate{.Name = AccountData.Name,
-                                         .PlatformId = AccountData.PlatformId,
-                                         .Clones = AccountData.Clones,
-                                         .Followers = AccountData.Followers,
-                                         .Forks = AccountData.Forks,
-                                         .Stars = AccountData.Stars,
-                                         .Views = AccountData.Views,
-                                         .Watchers = AccountData.Watchers};
+    git::models::Account AccountToCreate{
+        .Name = AccountData.Name,
+        .PlatformId = AccountData.PlatformId,
+        .Followers = AccountData.Followers,
+    };
 
     auto DbResponse = Database->create(AccountToCreate);
     if (!DbResponse) {
@@ -84,16 +78,12 @@ registerAccountsRoutes(glz::http_router &Router,
     }
     spdlog::info("POST /accounts - Created account '{}' with ID: {}",
                  DbResponse.value().Name, DbResponse.value().Id);
-    auto Output =
-        OutputAccountSchema{.Id = DbResponse.value().Id,
-                            .Name = DbResponse.value().Name,
-                            .PlatformId = DbResponse.value().PlatformId,
-                            .Clones = DbResponse.value().Clones,
-                            .Followers = DbResponse.value().Followers,
-                            .Forks = DbResponse.value().Forks,
-                            .Stars = DbResponse.value().Stars,
-                            .Views = DbResponse.value().Views,
-                            .Watchers = DbResponse.value().Watchers};
+    auto Output = OutputAccountSchema{
+        .Id = DbResponse.value().Id,
+        .Name = DbResponse.value().Name,
+        .PlatformId = DbResponse.value().PlatformId,
+        .Followers = DbResponse.value().Followers,
+    };
     Response.status(static_cast<int>(Created)).json(Output);
   });
 
@@ -103,22 +93,20 @@ registerAccountsRoutes(glz::http_router &Router,
                spdlog::debug("GET /accounts/{} - Fetching account", Id);
                auto DbResponse = Database->get<git::models::Account>(Id);
                if (!DbResponse) {
-                 spdlog::error("GET /accounts/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("GET /accounts/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
-               spdlog::debug("GET /accounts/{} - Found account '{}'", Id, DbResponse.value().Name);
+               spdlog::debug("GET /accounts/{} - Found account '{}'", Id,
+                             DbResponse.value().Name);
                auto Output = OutputAccountSchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
                    .PlatformId = DbResponse.value().PlatformId,
-                   .Clones = DbResponse.value().Clones,
                    .Followers = DbResponse.value().Followers,
-                   .Forks = DbResponse.value().Forks,
-                   .Stars = DbResponse.value().Stars,
-                   .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers};
+               };
 
                Response.status(static_cast<int>(Ok)).json(Output);
              },
@@ -139,7 +127,8 @@ registerAccountsRoutes(glz::http_router &Router,
         spdlog::debug("PATCH /accounts/{} - Updating account", Id);
         auto DbResponse = Database->get<git::models::Account>(Id);
         if (!DbResponse) {
-          spdlog::error("PATCH /accounts/{} - Database error: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /accounts/{} - Database error: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
@@ -147,33 +136,26 @@ registerAccountsRoutes(glz::http_router &Router,
 
         // Update values for platform.
         auto Account = DbResponse.value();
-        Account.Clones = AccountData.Clones;
         Account.Followers = AccountData.Followers;
-        Account.Forks = AccountData.Forks;
-        Account.Stars = AccountData.Stars;
-        Account.Views = AccountData.Views;
-        Account.Watchers = AccountData.Watchers;
 
         // Commit changes
         DbResponse = Database->update(Account);
         if (!DbResponse) {
-          spdlog::error("PATCH /accounts/{} - Failed to update: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /accounts/{} - Failed to update: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
         }
 
-        spdlog::info("PATCH /accounts/{} - Updated account '{}'", Id, DbResponse.value().Name);
-        auto Output =
-            OutputAccountSchema{.Id = DbResponse.value().Id,
-                                .Name = DbResponse.value().Name,
-                                .PlatformId = DbResponse.value().PlatformId,
-                                .Clones = DbResponse.value().Clones,
-                                .Followers = DbResponse.value().Followers,
-                                .Forks = DbResponse.value().Forks,
-                                .Stars = DbResponse.value().Stars,
-                                .Views = DbResponse.value().Views,
-                                .Watchers = DbResponse.value().Watchers};
+        spdlog::info("PATCH /accounts/{} - Updated account '{}'", Id,
+                     DbResponse.value().Name);
+        auto Output = OutputAccountSchema{
+            .Id = DbResponse.value().Id,
+            .Name = DbResponse.value().Name,
+            .PlatformId = DbResponse.value().PlatformId,
+            .Followers = DbResponse.value().Followers,
+        };
         Response.status(static_cast<int>(Ok)).json(Output);
       },
       {.constraints = {{"id", server::dependencies::uuidConstraint()}}});
@@ -184,23 +166,21 @@ registerAccountsRoutes(glz::http_router &Router,
                spdlog::debug("DELETE /accounts/{} - Soft deleting account", Id);
                auto DbResponse = Database->remove<git::models::Account>(Id);
                if (!DbResponse) {
-                 spdlog::error("DELETE /accounts/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("DELETE /accounts/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::info("DELETE /accounts/{} - Deleted account '{}'", Id, DbResponse.value().Name);
+               spdlog::info("DELETE /accounts/{} - Deleted account '{}'", Id,
+                            DbResponse.value().Name);
                auto Output = OutputAccountSchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
                    .PlatformId = DbResponse.value().PlatformId,
-                   .Clones = DbResponse.value().Clones,
                    .Followers = DbResponse.value().Followers,
-                   .Forks = DbResponse.value().Forks,
-                   .Stars = DbResponse.value().Stars,
-                   .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers};
+               };
                Response.status(static_cast<int>(Ok)).json(Output);
              },
              {.constraints = {{"id", server::dependencies::uuidConstraint()}}});

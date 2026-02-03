@@ -36,9 +36,21 @@ just clean-build # Clean and rebuild from scratch
 ### Environment Variables
 
 Create a `.env` file (loaded automatically by just):
+
+**Required:**
 - `DATABASE_URL` - PostgreSQL connection string
 - `GITHUB_TOKEN` - GitHub API token
+
+**Optional:**
 - `TAPIS_TOKEN` - Tapis API token
+- `HOST` - Server host (default: `127.0.0.1`)
+- `PORT` - Server port (default: `3000`)
+- `SSL_CERT_FILE` - Path to CA certificate bundle for HTTPS requests (default: system paths)
+  - macOS (Homebrew): `/opt/homebrew/etc/ca-certificates/cert.pem`
+  - Ubuntu/Debian: `/etc/ssl/certs/ca-certificates.crt`
+- `LOG_LEVEL` - Logging level: `trace`, `debug`, `info`, `warn`, `error` (default: `info`)
+
+See `.env.example` for a complete template.
 
 ## Dependencies
 

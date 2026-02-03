@@ -12,7 +12,7 @@
 
 namespace insights::git {
 
-core::Result<void>
+std::expected<void, core::Error>
 registerPlatformsRoutes(glz::http_router &Router,
                         std::shared_ptr<db::Database> &Database) {
 
@@ -27,24 +27,20 @@ registerPlatformsRoutes(glz::http_router &Router,
                auto DbResponse = Database->getAll<git::models::Platform>();
 
                if (!DbResponse) {
-                 spdlog::error("GET /platforms - Database error: {}", DbResponse.error().Message);
+                 spdlog::error("GET /platforms - Database error: {}",
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::debug("GET /platforms - Retrieved {} platforms", DbResponse.value().size());
+               spdlog::debug("GET /platforms - Retrieved {} platforms",
+                             DbResponse.value().size());
                std::vector<git::OutputPlatformSchema> Output;
                for (const auto &Platform : DbResponse.value()) {
                  Output.emplace_back(OutputPlatformSchema{
                      .Id = Platform.Id,
                      .Name = Platform.Name,
-                     .Clones = Platform.Clones,
-                     .Followers = Platform.Followers,
-                     .Forks = Platform.Forks,
-                     .Stars = Platform.Stars,
-                     .Views = Platform.Views,
-                     .Watchers = Platform.Watchers,
                  });
                }
 
@@ -63,14 +59,11 @@ registerPlatformsRoutes(glz::http_router &Router,
     }
     std::ranges::transform(PlatformData.Name, PlatformData.Name.begin(),
                            [](unsigned char Ch) { return std::tolower(Ch); });
-    spdlog::debug("POST /platforms - Creating platform '{}'", PlatformData.Name);
-    git::models::Platform PlatformToCreate{.Name = PlatformData.Name,
-                                           .Clones = PlatformData.Clones,
-                                           .Followers = PlatformData.Followers,
-                                           .Forks = PlatformData.Forks,
-                                           .Stars = PlatformData.Stars,
-                                           .Views = PlatformData.Views,
-                                           .Watchers = PlatformData.Watchers};
+    spdlog::debug("POST /platforms - Creating platform '{}'",
+                  PlatformData.Name);
+    git::models::Platform PlatformToCreate{
+        .Name = PlatformData.Name,
+    };
 
     auto DbResponse = Database->create(PlatformToCreate);
     if (!DbResponse) {
@@ -85,12 +78,6 @@ registerPlatformsRoutes(glz::http_router &Router,
     auto Output = OutputPlatformSchema{
         .Id = DbResponse.value().Id,
         .Name = DbResponse.value().Name,
-        .Clones = DbResponse.value().Clones,
-        .Followers = DbResponse.value().Followers,
-        .Forks = DbResponse.value().Forks,
-        .Stars = DbResponse.value().Stars,
-        .Views = DbResponse.value().Views,
-        .Watchers = DbResponse.value().Watchers,
     };
     Response.status(static_cast<int>(Created)).json(Output);
   });
@@ -101,21 +88,17 @@ registerPlatformsRoutes(glz::http_router &Router,
                spdlog::debug("GET /platforms/{} - Fetching platform", Id);
                auto DbResponse = Database->get<git::models::Platform>(Id);
                if (!DbResponse) {
-                 spdlog::error("GET /platforms/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("GET /platforms/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
-               spdlog::debug("GET /platforms/{} - Found platform '{}'", Id, DbResponse.value().Name);
+               spdlog::debug("GET /platforms/{} - Found platform '{}'", Id,
+                             DbResponse.value().Name);
                auto Output = OutputPlatformSchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
-                   .Clones = DbResponse.value().Clones,
-                   .Followers = DbResponse.value().Followers,
-                   .Forks = DbResponse.value().Forks,
-                   .Stars = DbResponse.value().Stars,
-                   .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers,
                };
 
                Response.status(static_cast<int>(Ok)).json(Output);
@@ -137,7 +120,8 @@ registerPlatformsRoutes(glz::http_router &Router,
         spdlog::debug("PATCH /platforms/{} - Updating platform", Id);
         auto DbResponse = Database->get<git::models::Platform>(Id);
         if (!DbResponse) {
-          spdlog::error("PATCH /platforms/{} - Database error: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /platforms/{} - Database error: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
@@ -145,32 +129,22 @@ registerPlatformsRoutes(glz::http_router &Router,
 
         // Update values for platform.
         auto Platform = DbResponse.value();
-        Platform.Clones = PlatformData.Clones;
-        Platform.Followers = PlatformData.Followers;
-        Platform.Forks = PlatformData.Forks;
-        Platform.Stars = PlatformData.Stars;
-        Platform.Views = PlatformData.Views;
-        Platform.Watchers = PlatformData.Watchers;
 
         // Commit changes
         DbResponse = Database->update(Platform);
         if (!DbResponse) {
-          spdlog::error("PATCH /platforms/{} - Failed to update: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /platforms/{} - Failed to update: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
         }
 
-        spdlog::info("PATCH /platforms/{} - Updated platform '{}'", Id, DbResponse.value().Name);
+        spdlog::info("PATCH /platforms/{} - Updated platform '{}'", Id,
+                     DbResponse.value().Name);
         auto Output = OutputPlatformSchema{
             .Id = DbResponse.value().Id,
             .Name = DbResponse.value().Name,
-            .Clones = DbResponse.value().Clones,
-            .Followers = DbResponse.value().Followers,
-            .Forks = DbResponse.value().Forks,
-            .Stars = DbResponse.value().Stars,
-            .Views = DbResponse.value().Views,
-            .Watchers = DbResponse.value().Watchers,
         };
         Response.status(static_cast<int>(Ok)).json(Output);
       },
@@ -179,25 +153,22 @@ registerPlatformsRoutes(glz::http_router &Router,
   Router.del("/platforms/:id",
              [Database](const glz::request &Request, glz::response &Response) {
                auto Id = Request.params.at("id");
-               spdlog::debug("DELETE /platforms/{} - Soft deleting platform", Id);
+               spdlog::debug("DELETE /platforms/{} - Soft deleting platform",
+                             Id);
                auto DbResponse = Database->remove<git::models::Platform>(Id);
                if (!DbResponse) {
-                 spdlog::error("DELETE /platforms/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("DELETE /platforms/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::info("DELETE /platforms/{} - Deleted platform '{}'", Id, DbResponse.value().Name);
+               spdlog::info("DELETE /platforms/{} - Deleted platform '{}'", Id,
+                            DbResponse.value().Name);
                auto Output = OutputPlatformSchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
-                   .Clones = DbResponse.value().Clones,
-                   .Followers = DbResponse.value().Followers,
-                   .Forks = DbResponse.value().Forks,
-                   .Stars = DbResponse.value().Stars,
-                   .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers,
                };
                Response.status(static_cast<int>(Ok)).json(Output);
              },

@@ -30,34 +30,61 @@ graph TB
 
 ## Core Patterns
 
-### Error Handling with `Result<T>`
+### Error Handling with `std::expected<T, E>`
 
-The codebase uses C++23 `std::expected<T, Error>` for error handling instead of exceptions at API boundaries.
+The codebase uses C++23 `std::expected<T, Error>` directly for error handling instead of exceptions at API boundaries.
 
 ```cpp
 // core/result.hpp
 namespace insights::core {
   struct Error { std::string Message; };
 
-  template<typename T>
-  using Result = std::expected<T, Error>;
+  // Note: Result<T> type alias was removed - use std::expected directly
+  // This makes the standard library usage explicit and improves code clarity
 }
 ```
 
 Usage pattern:
 ```cpp
-auto result = Database->create(entity);
+// Function signature shows explicit error type
+std::expected<Platform, core::Error> result = Database->create(entity);
+
 if (!result) {
     spdlog::error(result.error().Message);
-    return;
+    return std::unexpected(result.error());
 }
+
 auto entity = result.value();
 ```
 
-This provides:
-- Explicit error handling (can't ignore errors)
-- No exception overhead in hot paths
-- Clear function signatures showing fallibility
+**Why `std::expected` instead of exceptions:**
+- ✅ **Explicit error handling** - Can't ignore errors (won't compile)
+- ✅ **Zero overhead** - No exception unwinding in hot paths
+- ✅ **Type-safe** - Error type is part of function signature
+- ✅ **Standard library** - No custom types, better tooling support
+- ✅ **Self-documenting** - `std::expected<T, Error>` shows function can fail
+
+**Common patterns:**
+```cpp
+// Creating errors
+return std::unexpected(core::Error{"Database connection failed"});
+
+// Propagating errors
+if (!dbResult) {
+    return std::unexpected(dbResult.error());  // Forward the error
+}
+
+// Early returns for errors
+std::expected<void, core::Error> updateData() {
+    auto step1 = doStep1();
+    if (!step1) return std::unexpected(step1.error());
+
+    auto step2 = doStep2();
+    if (!step2) return std::unexpected(step2.error());
+
+    return {};  // Success (void expected)
+}
+```
 
 ### Database Connection Management
 
@@ -66,7 +93,7 @@ The `Database` struct wraps a `pqxx::connection` for PostgreSQL access.
 **Why `shared_ptr<Database>`?**
 
 ```cpp
-static core::Result<std::shared_ptr<Database>> connect(const std::string &ConnString);
+static std::expected<std::shared_ptr<Database>, core::Error> connect(const std::string &ConnString);
 ```
 
 1. **Non-movable connection**: `pqxx::connection` cannot be moved or copied. Returning by value would require a move, which fails.
@@ -86,7 +113,7 @@ static core::Result<std::shared_ptr<Database>> connect(const std::string &ConnSt
 Routes are registered as lambdas that capture the shared Database pointer:
 
 ```cpp
-core::Result<void> registerPlatformRoutes(
+std::expected<void, core::Error> registerPlatformRoutes(
     glz::http_router &Router,
     std::shared_ptr<db::Database>& Database
 ) {
@@ -113,13 +140,13 @@ The Database uses templates with a `DbEntity` concept and traits for type-safe C
 
 ```cpp
 template <core::DbEntity T>
-core::Result<T> create(const T &Entity);
+std::expected<T, core::Error> create(const T &Entity);
 
 template <core::DbEntity T>
-core::Result<T> get(const std::string &Id);
+std::expected<T, core::Error> get(const std::string &Id);
 
 template <core::DbEntity T>
-core::Result<std::vector<T>> getAll();
+std::expected<std::vector<T>, core::Error> getAll();
 ```
 
 Each entity type specializes `DbTraits<T>`:

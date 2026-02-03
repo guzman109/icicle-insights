@@ -4,6 +4,7 @@
 #include "core/config.hpp"
 #include "db/db.hpp"
 #include "git/router.hpp"
+#include "git/tasks.hpp"
 #include "server/routes.hpp"
 #include "server/server.hpp"
 #include "spdlog/spdlog.h"
@@ -13,13 +14,21 @@ int main() {
   auto *LogLevelEnv = std::getenv("LOG_LEVEL");
   if (LogLevelEnv != nullptr) {
     std::string LogLevel = LogLevelEnv;
-    if (LogLevel == "trace") spdlog::set_level(spdlog::level::trace);
-    else if (LogLevel == "debug") spdlog::set_level(spdlog::level::debug);
-    else if (LogLevel == "info") spdlog::set_level(spdlog::level::info);
-    else if (LogLevel == "warn") spdlog::set_level(spdlog::level::warn);
-    else if (LogLevel == "error") spdlog::set_level(spdlog::level::err);
+    if (LogLevel == "trace") {
+      spdlog::set_level(spdlog::level::trace);
+    } else if (LogLevel == "debug") {
+      spdlog::set_level(spdlog::level::debug);
+    } else if (LogLevel == "info") {
+      spdlog::set_level(spdlog::level::info);
+    } else if (LogLevel == "warn") {
+      spdlog::set_level(spdlog::level::warn);
+    } else if (LogLevel == "error") {
+      spdlog::set_level(spdlog::level::err);
+    }
   } else {
-    spdlog::set_level(spdlog::level::info);
+    {
+      spdlog::set_level(spdlog::level::info);
+    }
   }
 
   auto Config = insights::core::Config::load();
@@ -28,7 +37,8 @@ int main() {
     return 1;
   }
 
-  spdlog::debug("Loaded config - Host: {}, Port: {}", Config->Host, Config->Port);
+  spdlog::debug("Loaded config - Host: {}, Port: {}", Config->Host,
+                Config->Port);
 
   auto Server = insights::server::initServer(Config->Host, Config->Port);
   if (!Server) {
@@ -55,14 +65,26 @@ int main() {
     spdlog::error("Failed registering git routes.");
   }
 
-  Server.value()->mount("/", Router);
-  Server.value()->mount("/api/git", GitRouter);
-
-  auto ServerResult = insights::server::startServer(*Server.value(), Config->Host, Config->Port);
-  if (!ServerResult) {
-    spdlog::error("Failed to start server: {}", ServerResult.error().Message);
-    return 1;
+  // Server.value()->mount("/", Router);
+  // Server.value()->mount("/api/git", GitRouter);
+  //
+  // Test tasks module
+  spdlog::info("Testing GitHub tasks...");
+  auto TasksResult = insights::git::tasks::runAll("49d9c81c-54a7-4c47-8b24-10d4cfbc7b7a",
+                               Config->GitHubToken, *Database.value(), *Config);
+  if (!TasksResult) {
+    spdlog::error("Tasks failed: {}", TasksResult.error().Message);
+  } else {
+    spdlog::info("Tasks completed successfully!");
   }
-  spdlog::info("Server stopped");
-  return 0;
+
+  // auto ServerResult = insights::server::startServer(*Server.value(),
+  //                                                    Config->Host,
+  //                                                    Config->Port);
+  // if (!ServerResult) {
+  //   spdlog::error("Failed to start server: {}", ServerResult.error().Message);
+  //   return 1;
+  // }
+  // spdlog::info("Server stopped");
+  // return 0;
 }

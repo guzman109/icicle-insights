@@ -8,6 +8,6 @@ struct Error {
   std::string Message;
 };
 
-template <typename T> using Result = std::expected<T, Error>;
+// Result<T> type alias removed - use std::expected<T, core::Error> directly
 
 } // namespace insights::core

@@ -18,7 +18,7 @@ struct Database {
 
   explicit Database(const std::string &ConnString) : Cx(ConnString) {}
 
-  static core::Result<std::shared_ptr<Database>>
+  static std::expected<std::shared_ptr<Database>, core::Error>
   connect(const std::string &ConnString) {
     try {
       spdlog::debug("Database::connect - Establishing connection");
@@ -31,7 +31,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> core::Result<T> create(const T &Entity) {
+  template <core::DbEntity T> std::expected<T, core::Error> create(const T &Entity) {
     try {
       spdlog::trace("Database::create<{}> - Starting transaction", core::DbTraits<T>::TableName);
       pqxx::work Tx(Cx);
@@ -65,7 +65,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> core::Result<T> get(const std::string &Id) {
+  template <core::DbEntity T> std::expected<T, core::Error> get(const std::string &Id) {
     try {
       spdlog::trace("Database::get<{}> - Fetching entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);
@@ -88,7 +88,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> core::Result<T> remove(const std::string &Id) {
+  template <core::DbEntity T> std::expected<T, core::Error> remove(const std::string &Id) {
     try {
       spdlog::trace("Database::remove<{}> - Soft deleting entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);
@@ -108,7 +108,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> core::Result<T> update(const T &Entity) {
+  template <core::DbEntity T> std::expected<T, core::Error> update(const T &Entity) {
     try {
       spdlog::trace("Database::update<{}> - Updating entity with ID: {}", core::DbTraits<T>::TableName, Entity.Id);
       pqxx::work Tx(Cx);
@@ -135,7 +135,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> core::Result<std::vector<T>> getAll() {
+  template <core::DbEntity T> std::expected<std::vector<T>, core::Error> getAll() {
     try {
       spdlog::trace("Database::getAll<{}> - Fetching all entities", core::DbTraits<T>::TableName);
       pqxx::work Tx(Cx);

@@ -1,0 +1,22 @@
+# Database Configuration
+DATABASE_URL=postgresql://user:password@localhost:5432/insights
+
+# GitHub API Token
+GITHUB_TOKEN=your_github_token_here
+
+# Tapis API Token (optional)
+TAPIS_TOKEN=your_tapis_token_here
+
+# Server Configuration
+HOST=127.0.0.1
+PORT=3000
+
+# SSL/TLS Configuration (optional)
+# Path to CA certificate bundle for HTTPS client requests
+# If not set, defaults to system certificate paths
+# macOS (Homebrew): /opt/homebrew/etc/ca-certificates/cert.pem
+# Linux (Ubuntu/Debian): /etc/ssl/certs/ca-certificates.crt
+SSL_CERT_FILE=/opt/homebrew/etc/ca-certificates/cert.pem
+
+# Logging
+LOG_LEVEL=info

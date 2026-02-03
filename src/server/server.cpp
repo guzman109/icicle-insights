@@ -5,7 +5,7 @@
 
 namespace insights::server {
 
-core::Result<std::unique_ptr<glz::http_server<false>>>
+std::expected<std::unique_ptr<glz::http_server<false>>, core::Error>
 initServer(std::string Address, int Port) {
   auto Server{std::make_unique<glz::http_server<false>>()};
 
@@ -17,7 +17,7 @@ initServer(std::string Address, int Port) {
   return Server;
 }
 
-core::Result<void> startServer(glz::http_server<false> &Server,
+std::expected<void, core::Error> startServer(glz::http_server<false> &Server,
                                std::string Address, int Port,
                                std::optional<int> Workers) {
   try {

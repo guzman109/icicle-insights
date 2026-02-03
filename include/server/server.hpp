@@ -1,14 +1,15 @@
 #pragma once
 #include "core/result.hpp"
 #include "glaze/net/http_server.hpp"
+#include <expected>
 #include <memory>
 #include <optional>
 
 namespace insights::server {
 
-core::Result<std::unique_ptr<glz::http_server<false>>>
+std::expected<std::unique_ptr<glz::http_server<false>>, core::Error>
 initServer(std::string Address, int Port);
-core::Result<void> startServer(glz::http_server<false> &Server,
+std::expected<void, core::Error> startServer(glz::http_server<false> &Server,
                                std::string Address, int Port,
                                std::optional<int> Workers = std::nullopt);
 // core::Result<void> registerRouter(const GlazeServer &Server,

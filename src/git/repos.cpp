@@ -12,7 +12,7 @@
 
 namespace insights::git {
 
-core::Result<void>
+std::expected<void, core::Error>
 registerReposRoutes(glz::http_router &Router,
                     std::shared_ptr<db::Database> &Database) {
 
@@ -27,13 +27,15 @@ registerReposRoutes(glz::http_router &Router,
                auto DbResponse = Database->getAll<git::models::Repository>();
 
                if (!DbResponse) {
-                 spdlog::error("GET /repos - Database error: {}", DbResponse.error().Message);
+                 spdlog::error("GET /repos - Database error: {}",
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::debug("GET /repos - Retrieved {} repositories", DbResponse.value().size());
+               spdlog::debug("GET /repos - Retrieved {} repositories",
+                             DbResponse.value().size());
                std::vector<git::OutputRepositorySchema> Output;
                for (const auto &Repository : DbResponse.value()) {
                  Output.emplace_back(OutputRepositorySchema{
@@ -41,11 +43,9 @@ registerReposRoutes(glz::http_router &Router,
                      .Name = Repository.Name,
                      .AccountId = Repository.AccountId,
                      .Clones = Repository.Clones,
-                     .Followers = Repository.Followers,
                      .Forks = Repository.Forks,
                      .Stars = Repository.Stars,
                      .Views = Repository.Views,
-                     .Watchers = Repository.Watchers,
                  });
                }
 
@@ -64,16 +64,16 @@ registerReposRoutes(glz::http_router &Router,
     }
     std::ranges::transform(RepositoryData.Name, RepositoryData.Name.begin(),
                            [](unsigned char Ch) { return std::tolower(Ch); });
-    spdlog::debug("POST /repos - Creating repository '{}'", RepositoryData.Name);
+    spdlog::debug("POST /repos - Creating repository '{}'",
+                  RepositoryData.Name);
     git::models::Repository RepositoryToCreate{
         .Name = RepositoryData.Name,
         .AccountId = RepositoryData.AccountId,
         .Clones = RepositoryData.Clones,
-        .Followers = RepositoryData.Followers,
         .Forks = RepositoryData.Forks,
         .Stars = RepositoryData.Stars,
         .Views = RepositoryData.Views,
-        .Watchers = RepositoryData.Watchers};
+    };
 
     auto DbResponse = Database->create(RepositoryToCreate);
     if (!DbResponse) {
@@ -85,16 +85,15 @@ registerReposRoutes(glz::http_router &Router,
     }
     spdlog::info("POST /repos - Created repository '{}' with ID: {}",
                  DbResponse.value().Name, DbResponse.value().Id);
-    auto Output =
-        OutputRepositorySchema{.Id = DbResponse.value().Id,
-                               .Name = DbResponse.value().Name,
-                               .AccountId = DbResponse.value().AccountId,
-                               .Clones = DbResponse.value().Clones,
-                               .Followers = DbResponse.value().Followers,
-                               .Forks = DbResponse.value().Forks,
-                               .Stars = DbResponse.value().Stars,
-                               .Views = DbResponse.value().Views,
-                               .Watchers = DbResponse.value().Watchers};
+    auto Output = OutputRepositorySchema{
+        .Id = DbResponse.value().Id,
+        .Name = DbResponse.value().Name,
+        .AccountId = DbResponse.value().AccountId,
+        .Clones = DbResponse.value().Clones,
+        .Forks = DbResponse.value().Forks,
+        .Stars = DbResponse.value().Stars,
+        .Views = DbResponse.value().Views,
+    };
     Response.status(static_cast<int>(Created)).json(Output);
   });
 
@@ -104,22 +103,23 @@ registerReposRoutes(glz::http_router &Router,
                spdlog::debug("GET /repos/{} - Fetching repository", Id);
                auto DbResponse = Database->get<git::models::Repository>(Id);
                if (!DbResponse) {
-                 spdlog::error("GET /repos/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("GET /repos/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
-               spdlog::debug("GET /repos/{} - Found repository '{}'", Id, DbResponse.value().Name);
+               spdlog::debug("GET /repos/{} - Found repository '{}'", Id,
+                             DbResponse.value().Name);
                auto Output = OutputRepositorySchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
                    .AccountId = DbResponse.value().AccountId,
                    .Clones = DbResponse.value().Clones,
-                   .Followers = DbResponse.value().Followers,
                    .Forks = DbResponse.value().Forks,
                    .Stars = DbResponse.value().Stars,
                    .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers};
+               };
 
                Response.status(static_cast<int>(Ok)).json(Output);
              },
@@ -140,7 +140,8 @@ registerReposRoutes(glz::http_router &Router,
         spdlog::debug("PATCH /repos/{} - Updating repository", Id);
         auto DbResponse = Database->get<git::models::Repository>(Id);
         if (!DbResponse) {
-          spdlog::error("PATCH /repos/{} - Database error: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /repos/{} - Database error: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
@@ -149,32 +150,31 @@ registerReposRoutes(glz::http_router &Router,
         // Update values for platform.
         auto Repository = DbResponse.value();
         Repository.Clones = RepositoryData.Clones;
-        Repository.Followers = RepositoryData.Followers;
         Repository.Forks = RepositoryData.Forks;
         Repository.Stars = RepositoryData.Stars;
         Repository.Views = RepositoryData.Views;
-        Repository.Watchers = RepositoryData.Watchers;
 
         // Commit changes
         DbResponse = Database->update(Repository);
         if (!DbResponse) {
-          spdlog::error("PATCH /repos/{} - Failed to update: {}", Id, DbResponse.error().Message);
+          spdlog::error("PATCH /repos/{} - Failed to update: {}", Id,
+                        DbResponse.error().Message);
           Response.status(static_cast<int>(InternalServerError))
               .json({{"error", DbResponse.error().Message}});
           return;
         }
 
-        spdlog::info("PATCH /repos/{} - Updated repository '{}'", Id, DbResponse.value().Name);
-        auto Output =
-            OutputRepositorySchema{.Id = DbResponse.value().Id,
-                                   .Name = DbResponse.value().Name,
-                                   .AccountId = DbResponse.value().AccountId,
-                                   .Clones = DbResponse.value().Clones,
-                                   .Followers = DbResponse.value().Followers,
-                                   .Forks = DbResponse.value().Forks,
-                                   .Stars = DbResponse.value().Stars,
-                                   .Views = DbResponse.value().Views,
-                                   .Watchers = DbResponse.value().Watchers};
+        spdlog::info("PATCH /repos/{} - Updated repository '{}'", Id,
+                     DbResponse.value().Name);
+        auto Output = OutputRepositorySchema{
+            .Id = DbResponse.value().Id,
+            .Name = DbResponse.value().Name,
+            .AccountId = DbResponse.value().AccountId,
+            .Clones = DbResponse.value().Clones,
+            .Forks = DbResponse.value().Forks,
+            .Stars = DbResponse.value().Stars,
+            .Views = DbResponse.value().Views,
+        };
         Response.status(static_cast<int>(Ok)).json(Output);
       },
       {.constraints = {{"id", server::dependencies::uuidConstraint()}}});
@@ -185,23 +185,24 @@ registerReposRoutes(glz::http_router &Router,
                spdlog::debug("DELETE /repos/{} - Soft deleting repository", Id);
                auto DbResponse = Database->remove<git::models::Repository>(Id);
                if (!DbResponse) {
-                 spdlog::error("DELETE /repos/{} - Database error: {}", Id, DbResponse.error().Message);
+                 spdlog::error("DELETE /repos/{} - Database error: {}", Id,
+                               DbResponse.error().Message);
                  Response.status(static_cast<int>(InternalServerError))
                      .json({{"error", DbResponse.error().Message}});
                  return;
                }
 
-               spdlog::info("DELETE /repos/{} - Deleted repository '{}'", Id, DbResponse.value().Name);
+               spdlog::info("DELETE /repos/{} - Deleted repository '{}'", Id,
+                            DbResponse.value().Name);
                auto Output = OutputRepositorySchema{
                    .Id = DbResponse.value().Id,
                    .Name = DbResponse.value().Name,
                    .AccountId = DbResponse.value().AccountId,
                    .Clones = DbResponse.value().Clones,
-                   .Followers = DbResponse.value().Followers,
                    .Forks = DbResponse.value().Forks,
                    .Stars = DbResponse.value().Stars,
                    .Views = DbResponse.value().Views,
-                   .Watchers = DbResponse.value().Watchers};
+               };
                Response.status(static_cast<int>(Ok)).json(Output);
              },
              {.constraints = {{"id", server::dependencies::uuidConstraint()}}});

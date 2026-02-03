@@ -2,7 +2,7 @@
 #include <spdlog/spdlog.h>
 
 namespace insights::git {
-core::Result<void> registerRoutes(glz::http_router &Router,
+std::expected<void, core::Error> registerRoutes(glz::http_router &Router,
                                   std::shared_ptr<db::Database> &Database) {
   spdlog::debug("Registering git platforms routes");
   auto Res = registerPlatformsRoutes(Router, Database);
@@ -26,6 +26,6 @@ core::Result<void> registerRoutes(glz::http_router &Router,
   }
 
   spdlog::info("Successfully registered all git routes");
-  return core::Result<void>{};
+  return std::expected<void, core::Error>{};
 }
 } // namespace insights::git

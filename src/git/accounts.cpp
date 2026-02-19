@@ -1,10 +1,10 @@
-#include "core/http.hpp"
-#include "core/result.hpp"
-#include "db/db.hpp"
-#include "git/models.hpp"
-#include "git/router.hpp"
 #include "glaze/net/http_router.hpp"
-#include "server/dependencies.hpp"
+#include "insights/core/http.hpp"
+#include "insights/core/result.hpp"
+#include "insights/db/db.hpp"
+#include "insights/git/models.hpp"
+#include "insights/git/router.hpp"
+#include "insights/server/dependencies.hpp"
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -53,7 +53,7 @@ registerAccountsRoutes(glz::http_router &Router,
   Router.post("/accounts", [Database](const glz::request &Request,
                                       glz::response &Response) {
     CreateAccountSchema AccountData;
-    if (auto JsonError = glz::read_json(AccountData, Request.body)) {
+    if (auto JsonError = glz::read<core::JsonOpts>(AccountData, Request.body)) {
       spdlog::warn("POST /accounts - Invalid JSON in request body");
       Response.status(static_cast<int>(BadRequest))
           .json({{"error", "Invalid JSON"}});
@@ -116,7 +116,7 @@ registerAccountsRoutes(glz::http_router &Router,
       "/accounts/:id",
       [Database](const glz::request &Request, glz::response &Response) {
         UpdateSchema AccountData;
-        if (auto JsonError = glz::read_json(AccountData, Request.body)) {
+        if (auto JsonError = glz::read<core::JsonOpts>(AccountData, Request.body)) {
           spdlog::warn("PATCH /accounts/:id - Invalid JSON in request body");
           Response.status(static_cast<int>(BadRequest))
               .json({{"error", "Invalid JSON"}});

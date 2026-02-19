@@ -1,10 +1,11 @@
-#include "core/http.hpp"
-#include "core/result.hpp"
-#include "db/db.hpp"
-#include "git/models.hpp"
-#include "git/router.hpp"
 #include "glaze/net/http_router.hpp"
-#include "server/dependencies.hpp"
+#include "insights/core/config.hpp"
+#include "insights/core/http.hpp"
+#include "insights/core/result.hpp"
+#include "insights/db/db.hpp"
+#include "insights/git/models.hpp"
+#include "insights/git/router.hpp"
+#include "insights/server/dependencies.hpp"
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -51,7 +52,8 @@ registerPlatformsRoutes(glz::http_router &Router,
   Router.post("/platforms", [Database](const glz::request &Request,
                                        glz::response &Response) {
     CreatePlatformSchema PlatformData;
-    if (auto JsonError = glz::read_json(PlatformData, Request.body)) {
+    if (auto JsonError =
+            glz::read<core::JsonOpts>(PlatformData, Request.body)) {
       spdlog::warn("POST /platforms - Invalid JSON in request body");
       Response.status(static_cast<int>(BadRequest))
           .json({{"error", "Invalid JSON"}});
@@ -105,50 +107,51 @@ registerPlatformsRoutes(glz::http_router &Router,
              },
              {.constraints = {{"id", server::dependencies::uuidConstraint()}}});
 
-  Router.patch(
-      "/platforms/:id",
-      [Database](const glz::request &Request, glz::response &Response) {
-        UpdateSchema PlatformData;
-        if (auto JsonError = glz::read_json(PlatformData, Request.body)) {
-          spdlog::warn("PATCH /platforms/:id - Invalid JSON in request body");
-          Response.status(static_cast<int>(BadRequest))
-              .json({{"error", "Invalid JSON"}});
-          return;
-        }
-
-        auto Id = Request.params.at("id");
-        spdlog::debug("PATCH /platforms/{} - Updating platform", Id);
-        auto DbResponse = Database->get<git::models::Platform>(Id);
-        if (!DbResponse) {
-          spdlog::error("PATCH /platforms/{} - Database error: {}", Id,
-                        DbResponse.error().Message);
-          Response.status(static_cast<int>(InternalServerError))
-              .json({{"error", DbResponse.error().Message}});
-          return;
-        }
-
-        // Update values for platform.
-        auto Platform = DbResponse.value();
-
-        // Commit changes
-        DbResponse = Database->update(Platform);
-        if (!DbResponse) {
-          spdlog::error("PATCH /platforms/{} - Failed to update: {}", Id,
-                        DbResponse.error().Message);
-          Response.status(static_cast<int>(InternalServerError))
-              .json({{"error", DbResponse.error().Message}});
-          return;
-        }
-
-        spdlog::info("PATCH /platforms/{} - Updated platform '{}'", Id,
-                     DbResponse.value().Name);
-        auto Output = OutputPlatformSchema{
-            .Id = DbResponse.value().Id,
-            .Name = DbResponse.value().Name,
-        };
-        Response.status(static_cast<int>(Ok)).json(Output);
-      },
-      {.constraints = {{"id", server::dependencies::uuidConstraint()}}});
+  // Router.patch(
+  //     "/platforms/:id",
+  //     [Database](const glz::request &Request, glz::response &Response) {
+  //       UpdateSchema PlatformData;
+  //       if (auto JsonError = glz::read<core::JsonOpts>(PlatformData,
+  //       Request.body)) {
+  //         spdlog::warn("PATCH /platforms/:id - Invalid JSON in request
+  //         body"); Response.status(static_cast<int>(BadRequest))
+  //             .json({{"error", "Invalid JSON"}});
+  //         return;
+  //       }
+  //
+  //       auto Id = Request.params.at("id");
+  //       spdlog::debug("PATCH /platforms/{} - Updating platform", Id);
+  //       auto DbResponse = Database->get<git::models::Platform>(Id);
+  //       if (!DbResponse) {
+  //         spdlog::error("PATCH /platforms/{} - Database error: {}", Id,
+  //                       DbResponse.error().Message);
+  //         Response.status(static_cast<int>(InternalServerError))
+  //             .json({{"error", DbResponse.error().Message}});
+  //         return;
+  //       }
+  //
+  //       // Update values for platform.
+  //       auto Platform = DbResponse.value();
+  //
+  //       // Commit changes
+  //       DbResponse = Database->update(Platform);
+  //       if (!DbResponse) {
+  //         spdlog::error("PATCH /platforms/{} - Failed to update: {}", Id,
+  //                       DbResponse.error().Message);
+  //         Response.status(static_cast<int>(InternalServerError))
+  //             .json({{"error", DbResponse.error().Message}});
+  //         return;
+  //       }
+  //
+  //       spdlog::info("PATCH /platforms/{} - Updated platform '{}'", Id,
+  //                    DbResponse.value().Name);
+  //       auto Output = OutputPlatformSchema{
+  //           .Id = DbResponse.value().Id,
+  //           .Name = DbResponse.value().Name,
+  //       };
+  //       Response.status(static_cast<int>(Ok)).json(Output);
+  //     },
+  //     {.constraints = {{"id", server::dependencies::uuidConstraint()}}});
 
   Router.del("/platforms/:id",
              [Database](const glz::request &Request, glz::response &Response) {

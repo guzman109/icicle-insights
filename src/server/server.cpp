@@ -1,5 +1,5 @@
-#include "server/server.hpp"
-#include "server/middleware.hpp"
+#include "insights/server/server.hpp"
+#include "insights/server/middleware.hpp"
 #include "spdlog/spdlog.h"
 #include <expected>
 
@@ -18,8 +18,8 @@ initServer(std::string Address, int Port) {
 }
 
 std::expected<void, core::Error> startServer(glz::http_server<false> &Server,
-                               std::string Address, int Port,
-                               std::optional<int> Workers) {
+                                             std::string Address, int Port,
+                                             std::optional<int> Workers) {
   try {
     Server.start(Workers.value_or(1));
     spdlog::info("Server ready and listening on http://{}:{}", Address, Port);

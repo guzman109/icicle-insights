@@ -11,7 +11,7 @@ Accept: application/json
 
 ### 
 
-@platformId = "24ad2af2-2ff9-48f7-a50a-22aba433649a"
+@platformId = "9c58c2f3-cdf2-4e30-b02a-9843f874c825"
 
 
 ### Create a account
@@ -21,32 +21,24 @@ Content-Type: application/json
 
 {
   "Name": "icicle",
-  "PlatformId": {{platformId}}
+  "PlatformId": {{platformId}},
+  "KEY": "LSKJFLSD"
 }
 
 
 ### 
 
-@accountId = da1c8995-cf55-4fc9-80c4-8525cbbf1a18
+@accountId = e687b754-8eef-4bee-844c-fb0b15c37672
 ### Get an account
 GET {{baseUrl}}/api/git/accounts/{{accountId}} HTTP/1.1
 Content-Type: application/json
 
 ### Update an account
-PATCH {{baseUrl}}/api/git/accounts/{{accountId}} HTTP/1.1
-Content-Type: application/json
-
-{
-  "Clones": 100,
-  "Followers": 50,
-  "Forks": 25,
-  "Stars": 200,
-  "Views": 500,
-  "Watchers": 75
-}
-
+# PATCH {{baseUrl}}/api/git/accounts/{{accountId}} HTTP/1.1
+# Content-Type: application/json
+#
 ### Delete an account
-DELETE {{baseUrl}}/api/git/accounts/{{accountId}} HTTP/1.1
+# DELETE {{baseUrl}}/api/git/accounts/{{accountId}} HTTP/1.1
 
 ###
 

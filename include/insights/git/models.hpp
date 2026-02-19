@@ -6,8 +6,8 @@
 #include <string>
 #include <string_view>
 
-#include "core/timestamp.hpp"
-#include "core/traits.hpp"
+#include "insights/core/timestamp.hpp"
+#include "insights/core/traits.hpp"
 
 namespace insights::git::models {
 
@@ -77,7 +77,7 @@ template <> struct DbTraits<git::models::Account> {
       "name=$1, platform_id=$2, followers=$3";
 
   static auto toParams(const git::models::Account &Account) {
-    return std::make_tuple(Account.Name, Account.Followers);
+    return std::make_tuple(Account.Name, Account.PlatformId, Account.Followers);
   }
 
   static git::models::Account fromRow(const pqxx::row &Row) {
@@ -99,15 +99,16 @@ template <> struct DbTraits<git::models::Account> {
 template <> struct DbTraits<git::models::Repository> {
   static constexpr std::string_view TableName = "git_repositories";
   static constexpr std::string_view Columns =
-      "name, account_id, clones, forks, stars, views";
+      "name, account_id, clones, forks, stars, subscribers, views";
 
   static constexpr std::string_view UpdateSet =
-      "name=$1, account_id=$2, clones=$3, forks=$4, stars=$5, views=$6";
+      "name=$1, account_id=$2, clones=$3, forks=$4, stars=$5, subscribers=$6, views=$7";
 
   static auto toParams(const git::models::Repository &Repository) {
     return std::make_tuple(Repository.Name, Repository.AccountId,
                            Repository.Clones, Repository.Forks,
-                           Repository.Stars, Repository.Views);
+                           Repository.Stars, Repository.Subscribers,
+                           Repository.Views);
   }
 
   static git::models::Repository fromRow(const pqxx::row &Row) {
@@ -118,6 +119,7 @@ template <> struct DbTraits<git::models::Repository> {
         .Clones = Row["clones"].as<int32_t>(),
         .Forks = Row["forks"].as<int32_t>(),
         .Stars = Row["stars"].as<int32_t>(),
+        .Subscribers = Row["subscribers"].as<int32_t>(),
         .Views = Row["views"].as<int64_t>(),
         .CreatedAt = core::parseTimestamp(Row["created_at"].as<std::string>()),
         .UpdatedAt = core::parseTimestamp(Row["updated_at"].as<std::string>()),

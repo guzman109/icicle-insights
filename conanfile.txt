@@ -12,8 +12,5 @@ libpq/*:shared=True
 openssl/*:shared=True
 
 [generators]
-CMakeToolchain
 CMakeDeps
-
-[layout]
-cmake_layout
+CMakeToolchain

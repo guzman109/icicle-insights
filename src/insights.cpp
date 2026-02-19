@@ -1,5 +1,6 @@
 #include <asio/any_io_executor.hpp>
 #include <asio/io_context.hpp>
+#include <asio/signal_set.hpp>
 #include <asio/steady_timer.hpp>
 #include <chrono>
 #include <functional>
@@ -102,9 +103,9 @@ int main() {
 
   auto DaysUntilSunday = (7 - CurrentDay.c_encoding()) % 7;
   auto InitialDelay = std::chrono::days(DaysUntilSunday);
+  // auto InitialDelay = std::chrono::seconds(0);
 
   GitHubSyncTimer->expires_after(InitialDelay);
-
 
   // Register Database Connection for Tasks
   spdlog::info("Connecting to database.");
@@ -114,10 +115,11 @@ int main() {
     return 1;
   }
 
-  auto OnGitHubSync = std::make_shared<std::function<void(const std::error_code &)>>();
+  auto OnGitHubSync =
+      std::make_shared<std::function<void(const std::error_code &)>>();
   // Test tasks module
   *OnGitHubSync = [OnGitHubSync, GitHubSyncTimer, Config,
-             TasksDatabase](const std::error_code &ErrorCode) {
+                   TasksDatabase](const std::error_code &ErrorCode) {
     if (ErrorCode) {
       spdlog::error("Task failed with error: {}.", ErrorCode.message());
       return;
@@ -138,22 +140,22 @@ int main() {
   const size_t NumThreads = std::thread::hardware_concurrency();
   Threads.reserve(NumThreads);
 
-  for (auto _ : std::views::iota(0uz, NumThreads)) {
-    Threads.emplace_back([IOContext]() { IOContext->run(); });
-  }
-
   spdlog::info("Server ready and listening on http://{}:{}", Config->Host,
                Config->Port);
 
   spdlog::info("Tasks ready and running every 2 weeks on Sunday.");
   spdlog::info("Sharing {} threads.", NumThreads);
 
-  // TODO(human): Block main here until a shutdown signal arrives.
-  // Hint: call IOContext->run() — it blocks until IOContext->stop() is called.
-  // You'll also need an asio::signal_set (SIGINT, SIGTERM) whose async_wait
-  // callback calls IOContext->stop().  Set it up before the thread pool above.
-  Server.stop();
-  IOContext->stop();
+  asio::signal_set Signals(*IOContext, SIGINT, SIGTERM);
+  Signals.async_wait([&](const std::error_code &, int) {
+    spdlog::info("Shutdown signal received.");
+    Server.stop();
+    IOContext->stop();
+  });
+
+  for (auto _ : std::views::iota(0uz, NumThreads)) {
+    Threads.emplace_back([IOContext]() { IOContext->run(); });
+  }
 
   for (auto &Thread : Threads) {
     if (Thread.joinable()) {

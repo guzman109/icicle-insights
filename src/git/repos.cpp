@@ -1,10 +1,10 @@
-#include "core/http.hpp"
-#include "core/result.hpp"
-#include "db/db.hpp"
-#include "git/models.hpp"
-#include "git/router.hpp"
 #include "glaze/net/http_router.hpp"
-#include "server/dependencies.hpp"
+#include "insights/core/http.hpp"
+#include "insights/core/result.hpp"
+#include "insights/db/db.hpp"
+#include "insights/git/models.hpp"
+#include "insights/git/router.hpp"
+#include "insights/server/dependencies.hpp"
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <string>
@@ -45,6 +45,7 @@ registerReposRoutes(glz::http_router &Router,
                      .Clones = Repository.Clones,
                      .Forks = Repository.Forks,
                      .Stars = Repository.Stars,
+                     .Subscribers = Repository.Subscribers,
                      .Views = Repository.Views,
                  });
                }
@@ -56,7 +57,8 @@ registerReposRoutes(glz::http_router &Router,
   Router.post("/repos", [Database](const glz::request &Request,
                                    glz::response &Response) {
     CreateRepositorySchema RepositoryData;
-    if (auto JsonError = glz::read_json(RepositoryData, Request.body)) {
+    if (auto JsonError =
+            glz::read<core::JsonOpts>(RepositoryData, Request.body)) {
       spdlog::warn("POST /repos - Invalid JSON in request body");
       Response.status(static_cast<int>(BadRequest))
           .json({{"error", "Invalid JSON"}});
@@ -72,6 +74,7 @@ registerReposRoutes(glz::http_router &Router,
         .Clones = RepositoryData.Clones,
         .Forks = RepositoryData.Forks,
         .Stars = RepositoryData.Stars,
+        .Subscribers = RepositoryData.Subscribers,
         .Views = RepositoryData.Views,
     };
 
@@ -92,6 +95,7 @@ registerReposRoutes(glz::http_router &Router,
         .Clones = DbResponse.value().Clones,
         .Forks = DbResponse.value().Forks,
         .Stars = DbResponse.value().Stars,
+        .Subscribers = DbResponse.value().Subscribers,
         .Views = DbResponse.value().Views,
     };
     Response.status(static_cast<int>(Created)).json(Output);
@@ -129,7 +133,8 @@ registerReposRoutes(glz::http_router &Router,
       "/repos/:id",
       [Database](const glz::request &Request, glz::response &Response) {
         UpdateSchema RepositoryData;
-        if (auto JsonError = glz::read_json(RepositoryData, Request.body)) {
+        if (auto JsonError =
+                glz::read<core::JsonOpts>(RepositoryData, Request.body)) {
           spdlog::warn("PATCH /repos/:id - Invalid JSON in request body");
           Response.status(static_cast<int>(BadRequest))
               .json({{"error", "Invalid JSON"}});
@@ -152,6 +157,7 @@ registerReposRoutes(glz::http_router &Router,
         Repository.Clones = RepositoryData.Clones;
         Repository.Forks = RepositoryData.Forks;
         Repository.Stars = RepositoryData.Stars;
+        Repository.Subscribers = RepositoryData.Subscribers;
         Repository.Views = RepositoryData.Views;
 
         // Commit changes

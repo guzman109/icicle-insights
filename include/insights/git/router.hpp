@@ -1,6 +1,6 @@
 #pragma once
-#include "core/result.hpp"
-#include "db/db.hpp"
+#include "insights/core/result.hpp"
+#include "insights/db/db.hpp"
 #include "glaze/net/http_router.hpp"
 #include <expected>
 #include <memory>

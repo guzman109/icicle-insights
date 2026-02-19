@@ -1,4 +1,4 @@
-#include "git/router.hpp"
+#include "insights/git/router.hpp"
 #include <spdlog/spdlog.h>
 
 namespace insights::git {

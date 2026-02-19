@@ -9,8 +9,8 @@
 #include <string>
 #include <utility>
 
-#include "core/result.hpp"
-#include "core/traits.hpp"
+#include "insights/core/result.hpp"
+#include "insights/core/traits.hpp"
 
 namespace insights::db {
 struct Database {
@@ -65,7 +65,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> std::expected<T, core::Error> get(const std::string &Id) {
+  template <core::DbEntity T> std::expected<T, core::Error> get(std::string_view Id) {
     try {
       spdlog::trace("Database::get<{}> - Fetching entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);
@@ -88,7 +88,7 @@ struct Database {
     }
   }
 
-  template <core::DbEntity T> std::expected<T, core::Error> remove(const std::string &Id) {
+  template <core::DbEntity T> std::expected<T, core::Error> remove(std::string_view Id) {
     try {
       spdlog::trace("Database::remove<{}> - Soft deleting entity with ID: {}", core::DbTraits<T>::TableName, Id);
       pqxx::work Tx(Cx);

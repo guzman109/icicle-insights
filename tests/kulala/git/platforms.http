@@ -19,37 +19,20 @@ Content-Type: application/json
 
 {
   "Name": "github",
-  "Clones": 0,
-  "Followers": 0,
-  "Forks": 0,
-  "Stars": 0,
-  "Views": 0,
-  "Watchers": 0
+  "Key": "TELSKJDF"
 }
 
 
 ### 
 
-@platformId = a93d399d-b451-4f63-b781-07a0e0f6ca30
+@platformId = 9c58c2f3-cdf2-4e30-b02a-9843f874c825
 ### Get a platform
 GET {{baseUrl}}/api/git/platforms/{{platformId}} HTTP/1.1
 Content-Type: application/json
 
-### Update a platform
-PATCH {{baseUrl}}/api/git/platforms/{{platformId}} HTTP/1.1
-Content-Type: application/json
-
-{
-  "Clones": 100,
-  "Followers": 50,
-  "Forks": 25,
-  "Stars": 200,
-  "Views": 500,
-  "Watchers": 75
-}
-
 ### Delete a platform
 DELETE {{baseUrl}}/api/git/platforms/{{platformId}} HTTP/1.1
+Content-Type: application/json
 
 ###
 

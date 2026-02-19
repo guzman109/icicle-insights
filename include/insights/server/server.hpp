@@ -1,5 +1,5 @@
 #pragma once
-#include "core/result.hpp"
+#include "insights/core/result.hpp"
 #include "glaze/net/http_server.hpp"
 #include <expected>
 #include <memory>

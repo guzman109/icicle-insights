@@ -1,6 +1,9 @@
 # https://just.systems
 # CMake build system
 
+CONAN_DEPS_DIR := "build/conan"
+BUILD_DIR := "build"
+
 set dotenv-load := true
 set export := true
 
@@ -9,15 +12,18 @@ default:
 
 # Install dependencies with Conan
 deps:
-    conan install . --build=missing --output-folder=build -s compiler.cppstd=gnu23
+    conan install . --build=missing --output-folder={{ CONAN_DEPS_DIR }} -s compiler.cppstd=gnu23
 
-# Setup CMake build
+# Configure CMake build
 setup:
-    cmake --preset conan-release
+    cmake -B {{ BUILD_DIR }} \
+          -DCMAKE_TOOLCHAIN_FILE={{ CONAN_DEPS_DIR }}/conan_toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -G Ninja
 
 # Build the project
 build:
-    cmake --build --preset conan-release
+    cmake --build {{ BUILD_DIR }}
 
 # Full build from scratch
 full-build: deps setup build
@@ -29,4 +35,4 @@ clean-build:
 
 # Run the application
 run:
-    ./build/build/Release/icicle-insights
+    {{ BUILD_DIR }}/icicle-insights

@@ -2,7 +2,7 @@
 #include <glaze/net/http_router.hpp>
 #include <memory>
 
-#include "db/db.hpp"
+#include "insights/db/db.hpp"
 
 namespace insights::server {
 

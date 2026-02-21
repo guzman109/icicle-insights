@@ -49,3 +49,6 @@ CMakePresets.json
 # Claude Code
 .claude_code/
 .clinerules
+.claude/
+
+*env.json

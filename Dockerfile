@@ -13,8 +13,6 @@ ARG TARGETARCH
 RUN apt-get update && apt-get install -y \
     clang-18 \
     clang-tools-18 \
-    libc++-18-dev \
-    libc++abi-18-dev \
     lld \
     cmake \
     ninja-build \
@@ -34,7 +32,6 @@ RUN pip3 install --no-cache-dir conan --break-system-packages
 # Set compiler environment
 ENV CC=clang-18
 ENV CXX=clang++-18
-ENV CXXFLAGS="-stdlib=libc++"
 
 WORKDIR /app
 
@@ -47,8 +44,7 @@ RUN conan profile detect --force && \
     conan install . \
         --build=missing \
         --output-folder=build \
-        -s compiler.cppstd=gnu23 \
-        -s compiler.libcxx=libc++
+        -s compiler.cppstd=23
 
 # Copy source code
 COPY include/ ./include/
@@ -62,13 +58,11 @@ RUN cmake --preset conan-release && \
 # =============================================================================
 # Runtime Stage - Minimal production image
 # =============================================================================
-FROM ubuntu:24.04
+FROM debian:bookworm-slim
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y \
-    libc++1-18 \
-    libc++abi1-18 \
-    libssl3t64 \
+    libssl3 \
     libpq5 \
     ca-certificates \
     curl \
@@ -77,29 +71,23 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the compiled binary from builder stage
-# Path matches Conan's cmake_layout: build/build/Release/
-COPY --from=builder /app/build/build/Release/icicle-insights ./icicle-insights
+COPY --from=builder /app/build/icicle-insights ./icicle-insights
 
 # Copy data files (components.json, etc.)
 COPY data/ ./data/
 
 # Set up non-root user for security
-RUN useradd -m -u 1000 insights && \
+RUN useradd -m insights && \
+    mkdir -p /app/logs && \
     chown -R insights:insights /app
 USER insights
 
-# Environment variables (override at runtime)
-ENV DATABASE_URL=""
-ENV GITHUB_TOKEN=""
-ENV TAPIS_TOKEN=""
-ENV PORT=8080
+# Expose the default port (override with -e PORT=... at runtime)
+EXPOSE 5000
 
-# Expose the default port
-EXPOSE 8080
-
-# Health check (adjust endpoint as needed)
+# Health check — falls back to app default port if PORT is not set
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://${HOST:-localhost}:${PORT:-5000}/health || exit 1
 
 # Run the application
 CMD ["./icicle-insights"]

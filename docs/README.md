@@ -1,224 +1,171 @@
-# ICICLE Insights Documentation
+# Developer Guide
 
-Welcome to the ICICLE Insights documentation! This project is a C++23 HTTP server that collects and stores metrics about ICICLE project components.
-
-## Getting Started
-
-1. **[Architecture](architecture.md)** - Start here to understand the overall system design
-   - Error handling with `std::expected`
-   - Database connection management
-   - HTTP routing patterns
-   - Background task scheduler architecture
+Reference documentation for contributing to ICICLE Insights.
 
 ## Core Guides
 
-### Development Guides
-
-- **[HTTP Client Management](http-client-guide.md)** - Implement efficient HTTP client caching
-  - Why HTTP clients are expensive to create
-  - Client caching by base URL
-  - Thread-safe design for async operations
-  - Proper SSL configuration
-  - Migration path to async/await
-
-- **[Background Tasks](background-tasks.md)** - Running periodic jobs without blocking
-  - ASIO timer-based scheduling
-  - Alternative approaches (threads, cron)
-  - Non-blocking execution
-  - Testing strategies
-
-- **[Async Task Patterns](async-task-patterns.md)** - Advanced async programming with ASIO
-  - Thread pools with `asio::post`
-  - Structured task pipelines
-  - C++20 coroutines
-  - Migration path from sync to full async
-
-- **[TLS Guide](tls-guide.md)** - SSL/TLS configuration
-  - Certificate management
-  - System vs custom CA certificates
-  - Troubleshooting SSL errors
+| Guide | Description |
+|-------|-------------|
+| [architecture.md](architecture.md) | Module structure, core patterns, data model, and design decisions |
+| [background-tasks.md](background-tasks.md) | How to schedule recurring background tasks using `scheduleRecurringTask` |
+| [logging.md](logging.md) | Per-component named loggers, log file layout, and log configuration |
+| [tls-guide.md](tls-guide.md) | Configuring SSL/TLS for outbound HTTP client requests |
+| [task-persistence.md](task-persistence.md) | Future: persisting task run history and results to the database |
 
 ## Quick Reference
 
-### Common Patterns
+### Error Handling
 
-#### Error Handling
 ```cpp
-std::expected<T, core::Error> doWork() {
-  auto result = Database->get<Platform>(id);
-  if (!result) {
-    return std::unexpected(result.error());
-  }
-  return result.value();
+#include "insights/core/result.hpp"
+
+// Return a Result<T> from any function that can fail
+Result<MyModel> fetchSomething(std::string_view Id) {
+    auto Row = Db->get<MyModel>(Id);
+    if (!Row) {
+        return std::unexpected(Error{.Message = Row.error().Message});
+    }
+    return *Row;
+}
+
+// In a route handler
+auto Entry = Db->get<github::Account>(Id);
+if (!Entry) {
+    return glz::response{HttpStatus::NotFound, Entry.error().Message};
 }
 ```
 
-#### HTTP Client Usage
+### Adding a Route
+
+1. Declare the handler in the appropriate module's `routes.hpp`.
+2. Implement it in the corresponding `routes.cpp`.
+3. Register it inside the module's `registerRoutes` function:
+
 ```cpp
-HttpClientManager Manager(Config);
-auto Client = Manager.getClient("https://api.github.com");
-auto Response = (*Client)->get("/users/octocat", Headers);
+// github/routes.cpp
+Router.on<glz::GET>("/api/github/accounts/:id", [Db](glz::request& Req) {
+    auto Id    = Req.params["id"];
+    auto Entry = Db->get<github::Account>(Id);
+    if (!Entry) {
+        return glz::response{HttpStatus::NotFound, Entry.error().Message};
+    }
+    return glz::response{HttpStatus::Ok, *Entry};
+});
 ```
 
-#### Background Tasks
+### Adding a Task Logger
+
 ```cpp
-TaskScheduler Scheduler(Io, Database);
-Scheduler.start(std::chrono::hours(24 * 14));  // Every 2 weeks
+#include "insights/core/logging.hpp"
+
+// Inside a task function
+auto Logger = createLogger("my_task", Config);
+Logger->info("Starting sync");
+Logger->warn("Rate limit approaching: {} requests remaining", Remaining);
 ```
 
-## Learning Path
-
-If you're new to the codebase, follow this order:
-
-1. **[Architecture](architecture.md)** - Understand core patterns
-2. **[Background Tasks](background-tasks.md)** - See how periodic jobs work
-3. **[HTTP Client Guide](http-client-guide.md)** - Learn efficient HTTP patterns
-4. **[Async Task Patterns](async-task-patterns.md)** - Master async programming
+Logs are written to `{LOG_DIR}/my_task.log` and to shared stdout. See
+[logging.md](logging.md) for full details.
 
 ## Development Workflow
 
-### Building
 ```bash
-just deps        # Install dependencies
+just deps        # Install Conan dependencies
 just setup       # Configure CMake
-just build       # Build project
-just run         # Run server
+just build       # Compile
+just run         # Run the server
+
+just full-build  # deps + setup + build in one step
+just clean-build # Wipe build dir and rebuild from scratch
 ```
 
-### Testing
-```bash
-just test        # Run all tests
-just test-unit   # Unit tests only
-```
+See the project [CLAUDE.md](../CLAUDE.md) for environment variable configuration.
 
-### Common Tasks
+## Common Tasks
 
-**Add a new API endpoint:**
-1. Define models in `include/git/models.hpp`
-2. Add DbTraits specialization
-3. Create route handler in `src/git/router.cpp`
-4. Register route in router setup
+### Add an Endpoint
 
-**Add background data collection:**
-1. Implement task function in `src/git/tasks.cpp`
-2. Use `HttpClientManager` for API calls
-3. Return `std::expected<void, core::Error>`
-4. Call from scheduler or API endpoint
+1. **Model** — add or update a struct in `include/insights/<module>/models.hpp`.
+2. **DbTraits** — add a `DbTraits<MyModel>` specialization in `db/db.hpp` if the model is
+   database-backed.
+3. **Schema** — add input/output schema structs to `<module>/routes.hpp` if the endpoint
+   accepts or returns JSON.
+4. **Handler** — implement the lambda in `src/<module>/routes.cpp`.
+5. **Registration** — call `Router.on<METHOD>(path, handler)` inside `registerRoutes`.
+6. **CMakeLists.txt** — add any new `.cpp` files to the executable sources, then re-run
+   `just setup`.
 
-**Add new platform (GitLab, Bitbucket, etc.):**
-1. Create platform-specific models
-2. Implement API client wrapper
-3. Add scheduler for periodic updates
-4. Cache HTTP client by base URL
+### Add a Task Logger
+
+1. Call `createLogger("task_name", Config)` at the start of the task function.
+2. Use the returned `spdlog::logger` pointer for all logging in that task.
+3. Set `LOG_DIR` in your `.env` to direct file output to a known location.
 
 ## Code Style
 
-- **Error handling**: `std::expected<T, core::Error>` (no exceptions)
-- **Naming**: `PascalCase` for types, `lowerCamelCase` for functions
-- **Headers**: `#pragma once`, minimal includes
-- **Lifetimes**: `shared_ptr` for shared resources, references for parameters
+This project follows LLVM naming conventions:
 
-## Architecture Decisions
+| Construct | Convention | Example |
+|-----------|-----------|---------|
+| Types (class, struct, enum, typedef) | PascalCase | `Platform`, `HttpStatus` |
+| Variables | PascalCase | `Database`, `Config`, `NewAccount` |
+| Functions | lowerCamelCase verb phrase | `registerRoutes()`, `syncStats()` |
+| Enumerators | PascalCase | `Ok`, `BadRequest`, `NotFound` |
+| Struct/class members | PascalCase | `.Id`, `.Name`, `.AccountId` |
 
-Key design choices and their rationale:
+Additional rules:
+- `#pragma once` for all header guards.
+- Namespaced by module: `insights::<module>` (e.g., `insights::github`, `insights::core`).
+- No cryptic abbreviations: `JsonError` not `Ec`, `ErrorCode` not `Err`.
+- Header-only for small utilities; separate `.cpp` for route handlers and task implementations.
 
-| Decision | Rationale | See |
-|----------|-----------|-----|
-| `std::expected` over exceptions | Explicit errors, zero overhead | [Architecture](architecture.md#error-handling-with-stdexpectedt-e) |
-| `shared_ptr<Database>` | Non-movable + shared handler access | [Architecture](architecture.md#database-connection-management) |
-| HTTP client caching | Reuse connection pools (10x faster) | [HTTP Client Guide](http-client-guide.md) |
-| ASIO timers for scheduling | Integrated lifecycle, non-blocking | [Background Tasks](background-tasks.md) |
-| Thread pool for heavy tasks | Keep event loop responsive | [Async Patterns](async-task-patterns.md) |
-| C++23 features | Modern idioms, better tooling | Everywhere! |
+## Key Design Decisions
 
-## Migration Paths
-
-The codebase is designed for incremental migration to async:
-
-```mermaid
-graph LR
-    A[Phase 1:<br/>Sync HTTP] --> B[Phase 2:<br/>Async Tasks]
-    B --> C[Phase 3:<br/>Async DB]
-    C --> D[Phase 4:<br/>Full Async]
-
-    style A fill:#FFD700
-    style B fill:#90EE90
-    style C fill:#87CEEB
-    style D fill:#98FB98
-```
-
-**Current state:** Phase 1 (sync HTTP) with background tasks using thread pools
-
-**Next step:** Add async database layer while maintaining sync HTTP handlers
-
-**Goal:** Phase 4 - Fully async with coroutines everywhere
+| Decision | Rationale |
+|----------|-----------|
+| `std::expected` instead of exceptions | Zero-cost on the happy path; explicit error handling at every boundary |
+| Two database connections | Sync tasks hold transactions for seconds; a dedicated connection prevents blocking route handlers |
+| Shared io_context, `Server.start(0)` | One thread pool for HTTP and timers; clean shutdown via `IOContext->stop()` |
+| `scheduleRecurringTask` free function | No scheduler class to maintain; timer ownership is explicit via `shared_ptr<steady_timer>` |
+| Per-component named loggers | Isolates log output per subsystem; `server.log` and `github_sync.log` can be tailed independently |
+| Non-TLS HTTP server | TLS termination belongs to a reverse proxy (nginx, Caddy) in production deployments |
 
 ## Debugging Tips
 
-### Common Issues
+### Database Errors
 
-**SIGTRAP crash on HTTP client:**
-- Check SSL certificate paths
-- Don't `return` from SSL configuration lambdas
-- Ensure client is cached and reused
+Set `LOG_LEVEL=debug` in `.env` to see full SQL queries and libpqxx error messages. The
+`/health` endpoint pings the database and reports connection failures without exposing
+connection strings.
 
-**Database connection errors:**
-- Verify `DATABASE_URL` environment variable
-- Check PostgreSQL is running
-- Test connection with `psql`
+### Sync Task Failures
 
-**Slow requests:**
-- Check if background tasks are blocking event loop
-- Use thread pool for heavy operations
-- Profile with `spdlog` timing logs
+Background task output goes to `{LOG_DIR}/github_sync.log` (and stdout). If `LOG_DIR` is not
+set, only stdout is used. Tail the log during a sync run:
 
-### Logging
-
-Set log level via environment:
 ```bash
-LOG_LEVEL=debug just run  # Verbose logging
-LOG_LEVEL=info just run   # Normal (default)
-LOG_LEVEL=error just run  # Errors only
+tail -f /path/to/logs/github_sync.log
 ```
 
-## Contributing
+The GitHub sync fires immediately on startup (`InitialDelay = seconds(0)`), so any
+misconfiguration (bad token, network issue) will appear in the log within seconds of starting
+the server.
 
-### Adding Documentation
+### Route Not Found
 
-- Keep guides focused on one topic
-- Include code examples and diagrams
-- Show both "bad" and "good" patterns
-- Link to related guides
-- Add entry to this README
+Call `GET /routes` on the running server to get a machine-readable list of all registered
+paths and methods. This is faster than grepping source files and reflects the exact state of
+the live router.
 
-### Code Reviews
+### Per-Component Log Files
 
-Look for:
-- Error handling with `std::expected`
-- Efficient parameter passing (const ref for shared_ptr, strings)
-- Thread safety for async operations
-- Proper client caching
-- No blocking in event loop
+Each named logger writes to its own file under `LOG_DIR`:
 
-## External Resources
+| Logger name | File |
+|-------------|------|
+| `server` | `{LOG_DIR}/server.log` |
+| `github_sync` | `{LOG_DIR}/github_sync.log` |
 
-### C++23 Features
-- [`std::expected` reference](https://en.cppreference.com/w/cpp/utility/expected)
-- [C++20 coroutines](https://en.cppreference.com/w/cpp/language/coroutines)
-
-### Libraries
-- [Glaze (HTTP + JSON)](https://github.com/stephenberry/glaze)
-- [ASIO](https://think-async.com/Asio/)
-- [libpqxx (PostgreSQL)](https://pqxx.org/development/libpqxx/)
-- [spdlog](https://github.com/gabime/spdlog)
-
-### Async Programming
-- [Asynchronous Programming with ASIO](https://think-async.com/Asio/asio-1.30.2/doc/asio/overview/core/async.html)
-- [C++ Coroutines: Understanding the Compiler Transform](https://lewissbaker.github.io/2017/09/25/coroutine-theory)
-
-## Questions?
-
-Check existing guides first, then:
-1. Search codebase for examples
-2. Check library documentation
-3. Ask in project chat/issues
+All loggers also write to shared stdout. Log level is controlled globally by the `LOG_LEVEL`
+environment variable. Logs flush immediately on `warn` or above, and flush automatically
+every second otherwise.

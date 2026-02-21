@@ -1,11 +1,11 @@
 ###
 
-@baseUrl = http://{{KULALA_HOST}}:{{KULALA_PORT}}
-
+@baseUrl = {{BASE_URL}}
 ### Health Check - Verify database connectivity
 
 GET {{baseUrl}}/health HTTP/1.1
 Accept: application/json
+X-Tapis-Token: {{Tapis_Token}}
 
 
 ###
@@ -15,7 +15,7 @@ Accept: application/json
 
 GET {{baseUrl}}/routes HTTP/1.1
 Accept: application/json
-
+X-Tapis-Token: {{Tapis_Token}}
 
 ###
 

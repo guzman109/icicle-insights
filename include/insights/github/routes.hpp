@@ -25,15 +25,6 @@ struct CreateRepositorySchema {
   std::optional<int> Views;
 };
 
-struct UpdateSchema {
-  std::optional<int> Clones;
-  std::optional<int> Followers;
-  std::optional<int> Forks;
-  std::optional<int> Stars;
-  std::optional<int> Views;
-  std::optional<int> Subscribers;
-};
-
 struct OutputAccountSchema {
   std::string Id;
   std::string Name;
@@ -51,8 +42,8 @@ struct OutputRepositorySchema {
   long long Views{0};
 };
 
-auto registerRoutes(glz::http_router &Router,
-                    std::shared_ptr<db::Database> &Database)
-    -> std::expected<void, core::Error>;
+auto registerRoutes(
+    glz::http_router &Router, std::shared_ptr<db::Database> &Database
+) -> std::expected<void, core::Error>;
 
 } // namespace insights::github

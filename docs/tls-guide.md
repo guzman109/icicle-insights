@@ -2,6 +2,12 @@
 
 This guide covers TLS/SSL configuration for both HTTPS clients (making requests) and HTTPS servers in ICICLE Insights.
 
+> **Current implementation:** The `github/tasks.cpp` HTTP client uses
+> `Client->configure_system_ca_certificates()` which reads `SSL_CERT_FILE` from
+> the environment automatically. See [http-client-guide.md](http-client-guide.md)
+> for the recommended approach. This guide covers the underlying ASIO mechanisms
+> for reference.
+
 ## Table of Contents
 
 - [Client-Side HTTPS (Making Requests)](#client-side-https-making-requests)

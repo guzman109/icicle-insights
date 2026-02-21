@@ -22,14 +22,14 @@ find_package(libpqxx REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+file(GLOB core_SRC src/core/*.cpp)
 file(GLOB git_SRC src/github/*.cpp)
-file(GLOB server_SRC src/server/*.cpp)
 
 # Executable
 add_executable(${PROJECT_NAME}
     src/insights.cpp
+    ${core_SRC}
     ${git_SRC}
-    ${server_SRC}
 )
 
 # Include directories

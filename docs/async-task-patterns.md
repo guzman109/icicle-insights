@@ -7,18 +7,18 @@ This guide explores non-blocking approaches to running periodic background tasks
 **Current State:** The project uses **synchronous HTTP handlers** with glaze for simplicity during initial development:
 
 ```cpp
-Router.get("/platforms", [Database](auto &Req, auto &Res) {
-  auto Platforms = Database->getAll<Platform>();  // Blocks current request
-  Res.send(Platforms);
+Router.get("/api/github/repos", [Database](auto &Req, auto &Res) {
+  auto Repos = Database->getAll<github::models::Repository>();  // Blocks current request
+  Res.send(Repos);
 });
 ```
 
 **Future State:** Glaze supports **async handlers** that can leverage ASIO for non-blocking I/O:
 
 ```cpp
-Router.get("/platforms", [Database](auto &Req, auto &Res) -> asio::awaitable<void> {
-  auto Platforms = co_await Database->getAllAsync<Platform>();  // Async!
-  Res.send(Platforms);
+Router.get("/api/github/repos", [Database](auto &Req, auto &Res) -> asio::awaitable<void> {
+  auto Repos = co_await Database->getAllAsync<github::models::Repository>();  // Async!
+  Res.send(Repos);
 });
 ```
 
@@ -54,12 +54,10 @@ graph TB
     subgraph "Worker Thread Pool"
         E[Worker 1] --> F[updateRepositories]
         G[Worker 2] --> H[updateAccounts]
-        I[Worker 3] --> J[updatePlatforms]
     end
 
     D -.async.-> E
     D -.async.-> G
-    D -.async.-> I
 
     style A fill:#90EE90
     style B fill:#90EE90
@@ -110,7 +108,7 @@ sequenceDiagram
 #include <memory>
 #include <chrono>
 
-namespace insights::git {
+namespace insights::github {
 
 class TaskScheduler {
 public:
@@ -133,7 +131,7 @@ private:
   bool Running;
 };
 
-} // namespace insights::git
+} // namespace insights::github
 ```
 
 ```cpp
@@ -232,7 +230,7 @@ void TaskScheduler::runTasksAsync() {
   spdlog::debug("Tasks posted to worker pool, main thread continues");
 }
 
-} // namespace insights::git
+} // namespace insights::github
 ```
 
 **Key Points:**
@@ -274,14 +272,10 @@ void TaskScheduler::runTasksAsync() {
             return;
           }
 
-          // Stage 3: Update platforms (on worker thread)
-          asio::post(WorkerPool, [this]() {
-            spdlog::debug("Stage 3: Updating platforms");
-            auto Result = tasks::updatePlatforms(*Db);
-
-            asio::post(Timer.get_executor(), [Result]() {
+          // Pipeline complete
+          asio::post(Timer.get_executor(), [Result]() {
               if (!Result) {
-                spdlog::error("Platform update failed: {}", Result.error().Message);
+                spdlog::error("Account update failed: {}", Result.error().Message);
               } else {
                 spdlog::info("Full pipeline completed successfully");
               }
@@ -318,11 +312,6 @@ sequenceDiagram
     Pool->>Main: Post result
     Main->>Main: Check success
 
-    Main->>Pool: Post Stage 3
-    Main->>Main: Continue serving HTTP ✓
-
-    Pool->>Pool: updatePlatforms()
-    Pool->>Main: Post result
     Main->>Main: Log completion
 ```
 
@@ -366,13 +355,13 @@ void TaskScheduler::runTasksParallel() {
   });
 
   asio::post(WorkerPool, [this, OnComplete]() {
-    spdlog::debug("Parallel task: Platforms");
-    auto Result = tasks::updatePlatforms(*Db);
-    if (!Result) spdlog::error("Platform update failed: {}", Result.error().Message);
+    spdlog::debug("Parallel task: Accounts");
+    auto Result = tasks::updateAccounts(*Db);
+    if (!Result) spdlog::error("Account update failed: {}", Result.error().Message);
     OnComplete();
   });
 
-  spdlog::debug("3 tasks posted to worker pool");
+  spdlog::debug("2 tasks posted to worker pool");
 }
 ```
 
@@ -387,16 +376,13 @@ void TaskScheduler::runTasksParallel() {
 ```mermaid
 graph LR
     A[Timer Expires] --> B[co_spawn coroutine]
-    B --> C[co_await Stage 1]
+    B --> C[co_await Repos]
     C --> D{Success?}
-    D -->|Yes| E[co_await Stage 2]
+    D -->|Yes| E[co_await Accounts]
     D -->|No| Z[co_return]
     E --> F{Success?}
-    F -->|Yes| G[co_await Stage 3]
+    F -->|Yes| I[Complete]
     F -->|No| Z
-    G --> H{Success?}
-    H -->|Yes| I[Complete]
-    H -->|No| Z
 
     style A fill:#FFD700
     style B fill:#90EE90
@@ -493,16 +479,6 @@ asio::awaitable<void> TaskScheduler::runTasksCoroutine() {
     co_return;
   }
 
-  // Stage 3: Platforms
-  auto PlatformResult = co_await runTaskInPool([this]() {
-    return tasks::updatePlatforms(*Db);
-  });
-
-  if (!PlatformResult) {
-    spdlog::error("Platform update failed: {}", PlatformResult.error().Message);
-    co_return;
-  }
-
   spdlog::info("All tasks completed successfully");
 }
 
@@ -527,7 +503,7 @@ asio::awaitable<core::Result<void>> TaskScheduler::runTaskInPool(
   co_return co_await asio::async_wait_until(Future, asio::use_awaitable);
 }
 
-} // namespace insights::git
+} // namespace insights::github
 ```
 
 **Benefits of Coroutines:**
@@ -547,8 +523,6 @@ asio::awaitable<void> TaskScheduler::runTasksCoroutine() {
 
   auto Acct = co_await runTaskInPool([]() { /* update accounts */ });
   if (!Acct) co_return;
-
-  auto Plat = co_await runTaskInPool([]() { /* update platforms */ });
   // Done!
 }
 ```
@@ -624,12 +598,12 @@ void TaskScheduler::runTasksAsync() {
       }
 
       core::AsyncTask<void> PlatformTask(WorkerPool, [this]() {
-        return tasks::updatePlatforms(*Db);
+        return tasks::updateAccounts(*Db);
       });
 
       PlatformTask.execute([](auto Result) {
         if (!Result) {
-          spdlog::error("Platform update failed: {}", Result.error().Message);
+          spdlog::error("Account update failed: {}", Result.error().Message);
         } else {
           spdlog::info("All tasks completed");
         }

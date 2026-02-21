@@ -1,5 +1,6 @@
 #pragma once
 #include "insights/core/result.hpp"
+
 #include <cstddef>
 #include <cstdlib>
 #include <expected>
@@ -12,12 +13,16 @@ struct Config {
   std::string DatabaseUrl;
   std::string GitHubToken;
   std::string Host{"127.0.0.1"};
+  std::optional<std::string> LogDir;
+  std::string LogLevel{"info"};
 
   static std::expected<Config, Error> load() {
     auto *DatabaseUrlEnv = std::getenv("DATABASE_URL");
     auto *GitHubTokenEnv = std::getenv("GITHUB_TOKEN");
     auto *HostEnv = std::getenv("HOST");
     auto *PortEnv = std::getenv("PORT");
+    auto *LogFileEnv = std::getenv("LOG_DIR");
+    auto *LogLevelEnv = std::getenv("LOG_LEVEL");
 
     if (DatabaseUrlEnv == nullptr) {
       return std::unexpected(Error{"DATABASE_URL is required"});
@@ -42,6 +47,9 @@ struct Config {
         .DatabaseUrl = DatabaseUrlEnv,
         .GitHubToken = GitHubTokenEnv,
         .Host = Host,
+        .LogDir = LogFileEnv != nullptr ? std::optional<std::string>{LogFileEnv}
+                                        : std::nullopt,
+        .LogLevel = LogLevelEnv != nullptr ? LogLevelEnv : "info",
     };
   }
 };

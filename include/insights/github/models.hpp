@@ -1,4 +1,7 @@
 #pragma once
+#include "insights/core/timestamp.hpp"
+#include "insights/core/traits.hpp"
+
 #include <chrono>
 #include <ctime>
 #include <optional>
@@ -6,9 +9,6 @@
 #include <string>
 #include <string_view>
 #include <tuple>
-
-#include "insights/core/timestamp.hpp"
-#include "insights/core/traits.hpp"
 
 namespace insights::github::models {
 
@@ -59,7 +59,8 @@ template <> struct DbTraits<github::models::Account> {
         .DeletedAt = Row["deleted_at"].is_null()
                          ? std::nullopt
                          : std::optional{core::parseTimestamp(
-                               Row["deleted_at"].as<std::string>())},
+                               Row["deleted_at"].as<std::string>()
+                           )},
     };
   }
 };
@@ -74,10 +75,15 @@ template <> struct DbTraits<github::models::Repository> {
       "views=$7";
 
   static auto toParams(const github::models::Repository &Repository) {
-    return std::make_tuple(Repository.Name, Repository.AccountId,
-                           Repository.Clones, Repository.Forks,
-                           Repository.Stars, Repository.Subscribers,
-                           Repository.Views);
+    return std::make_tuple(
+        Repository.Name,
+        Repository.AccountId,
+        Repository.Clones,
+        Repository.Forks,
+        Repository.Stars,
+        Repository.Subscribers,
+        Repository.Views
+    );
   }
 
   static github::models::Repository fromRow(const pqxx::row &Row) {
@@ -95,7 +101,8 @@ template <> struct DbTraits<github::models::Repository> {
         .DeletedAt = Row["deleted_at"].is_null()
                          ? std::nullopt
                          : std::optional{core::parseTimestamp(
-                               Row["deleted_at"].as<std::string>())},
+                               Row["deleted_at"].as<std::string>()
+                           )},
     };
   }
 };

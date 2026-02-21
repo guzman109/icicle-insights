@@ -1,13 +1,13 @@
 ###
 
-@baseUrl = http://{{KULALA_HOST}}:{{KULALA_PORT}}
+@baseUrl = {{BASE_URL}}
 
 
 ### Get all accounts
 
 GET {{baseUrl}}/api/github/accounts HTTP/1.1
 Accept: application/json
-
+X-Tapis-Token: {{Tapis_Token}}
 
 ### 
 
@@ -26,7 +26,7 @@ Content-Type: application/json
 
 ### 
 
-@accountId = dc63bbe7-b31a-4b2d-b245-9dca9daf945e
+@accountId = 1
 ### Get an account
 GET {{baseUrl}}/api/github/accounts/{{accountId}} HTTP/1.1
 Content-Type: application/json

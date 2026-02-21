@@ -301,67 +301,6 @@ auto registerRoutes(
       {.constraints = {{"id", server::dependencies::uuidConstraint()}}}
   );
 
-  // Update Repo
-  Router.patch(
-      "/repos/:id",
-      [Database](const glz::request &Request, glz::response &Response) {
-        UpdateSchema RepositoryData;
-        if (auto JsonError =
-                glz::read<core::JsonOpts>(RepositoryData, Request.body)) {
-          spdlog::warn("PATCH /repos/:id - Invalid JSON in request body");
-          Response.status(static_cast<int>(BadRequest))
-              .json({{"error", "Invalid JSON"}});
-          return;
-        }
-
-        auto Id = Request.params.at("id");
-        spdlog::debug("PATCH /repos/{} - Updating repository", Id);
-        auto Result = Database->get<github::models::Repository>(Id);
-        if (!Result) {
-          spdlog::error(
-              "PATCH /repos/{} - Database error: {}", Id, Result.error().Message
-          );
-          Response.status(static_cast<int>(InternalServerError))
-              .json({{"error", Result.error().Message}});
-          return;
-        }
-
-        Result->Clones = RepositoryData.Clones.value_or(Result->Clones);
-        Result->Forks = RepositoryData.Forks.value_or(Result->Forks);
-        Result->Stars = RepositoryData.Stars.value_or(Result->Stars);
-        Result->Subscribers =
-            RepositoryData.Subscribers.value_or(Result->Subscribers);
-        Result->Views = RepositoryData.Views.value_or(Result->Views);
-
-        Result = Database->update(*Result);
-        if (!Result) {
-          spdlog::error(
-              "PATCH /repos/{} - Failed to update: {}",
-              Id,
-              Result.error().Message
-          );
-          Response.status(static_cast<int>(InternalServerError))
-              .json({{"error", Result.error().Message}});
-          return;
-        }
-
-        spdlog::info(
-            "PATCH /repos/{} - Updated repository '{}'", Id, Result->Name
-        );
-        auto Output = OutputRepositorySchema{
-            .Id = Result->Id,
-            .Name = Result->Name,
-            .AccountId = Result->AccountId,
-            .Clones = Result->Clones,
-            .Forks = Result->Forks,
-            .Stars = Result->Stars,
-            .Views = Result->Views,
-        };
-        Response.status(static_cast<int>(Ok)).json(Output);
-      },
-      {.constraints = {{"id", server::dependencies::uuidConstraint()}}}
-  );
-
   // Soft Delete Repo
   Router.del(
       "/repos/:id",

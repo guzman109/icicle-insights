@@ -1,10 +1,11 @@
 #include "insights/core/config.hpp"
+#include "insights/core/logging.hpp"
 #include "insights/core/scheduler.hpp"
 #include "insights/db/db.hpp"
 #include "insights/github/routes.hpp"
 #include "insights/github/tasks.hpp"
 #include "insights/server/middleware/logging.hpp"
-#include "insights/server/routes.hpp"
+#include "insights/core/routes.hpp"
 
 #include "spdlog/spdlog.h"
 
@@ -22,39 +23,24 @@
 #include <thread>
 
 int main() {
+  // Use ASIO IO Context for background tasks.
   auto IOContext = std::make_shared<asio::io_context>();
-  // Configure log level
-  auto *LogLevelEnv = std::getenv("LOG_LEVEL");
-  if (LogLevelEnv != nullptr) {
-    std::string LogLevel = LogLevelEnv;
-    if (LogLevel == "trace") {
-      spdlog::set_level(spdlog::level::trace);
-    } else if (LogLevel == "debug") {
-      spdlog::set_level(spdlog::level::debug);
-    } else if (LogLevel == "info") {
-      spdlog::set_level(spdlog::level::info);
-    } else if (LogLevel == "warn") {
-      spdlog::set_level(spdlog::level::warn);
-    } else if (LogLevel == "error") {
-      spdlog::set_level(spdlog::level::err);
-    }
-  } else {
-    {
-      spdlog::set_level(spdlog::level::info);
-    }
-  }
 
+  // Pull Environment Variables.
   auto Config = insights::core::Config::load();
   if (!Config) {
     spdlog::error(Config.error().Message);
     return 1;
   }
 
+  // Configure logging — server logger becomes default, one file per component
+  insights::core::setupLogging(*Config);
+  insights::core::createLogger("github_sync", *Config);
+
   spdlog::debug(
       "Loaded config - Host: {}, Port: {}", Config->Host, Config->Port
   );
 
-  // auto Server = insights::server::initServer(Config->Host, Config->Port);
   // Initialize Insights HTTP Server
   auto Server{glz::http_server<false>(IOContext)};
 
@@ -76,7 +62,7 @@ int main() {
   // Register Routes
   glz::http_router Router;
   spdlog::info("Registering routes:");
-  insights::server::registerCoreRoutes(Router, ServerDatabase.value());
+  insights::core::registerCoreRoutes(Router, ServerDatabase.value());
   spdlog::info("GitHubRoutes");
   glz::http_router GitHubRouter;
 
@@ -112,9 +98,8 @@ int main() {
   auto Today = std::chrono::floor<std::chrono::days>(Now);
   std::chrono::weekday CurrentDay(Today);
 
-  auto DaysUntilSunday = (7 - CurrentDay.c_encoding()) % 7;
-  // auto InitialDelay = std::chrono::days(DaysUntilSunday);
-  auto InitialDelay = std::chrono::seconds(0);
+  auto DaysUntilSaturday = (6 - CurrentDay.c_encoding() + 7) % 7;
+  auto InitialDelay = std::chrono::days(DaysUntilSaturday);
   auto Interval = std::chrono::weeks(2);
 
   GitHubSyncTimer->expires_after(InitialDelay);
@@ -144,6 +129,7 @@ int main() {
     spdlog::info("Shutdown signal received.");
     Server.stop();
     IOContext->stop();
+    spdlog::shutdown();
   });
 
   for (auto _ : std::views::iota(0uz, NumThreads)) {

@@ -20,13 +20,16 @@
 #include <system_error>
 
 namespace insights::github::tasks {
+
+static auto Log() { return spdlog::get("github_sync"); }
+
 static std::expected<std::shared_ptr<glz::http_client>, core::Error>
 createClient(const core::Config &Config) {
   auto Client = std::make_shared<glz::http_client>();
 
   auto Ok = Client->configure_system_ca_certificates();
   if (!Ok) {
-    spdlog::error("Error: Could not find CA certificates.");
+    Log()->error("Error: Could not find CA certificates.");
     return std::unexpected(
         core::Error{"Error: Could not find CA certificates."}
     );
@@ -55,7 +58,7 @@ auto updateRepositories(
 
   // Validate client is initialized
   if (!Client) {
-    spdlog::error("HTTP Client is null");
+    Log()->error("HTTP Client is null");
     return std::unexpected(core::Error{"Client initialization failed"});
   }
 
@@ -70,12 +73,13 @@ auto updateRepositories(
     );
 
     // Log the request
-    spdlog::debug("Making HTTP GET request to: {}", Url);
+    Log()->debug("Making HTTP GET request to: {}", Url);
 
     // Repo Stats API
     auto Response = Client->get(Url, Headers);
     if (!Response) {
-      spdlog::error("GET {} failed: {}", Url, Response.error().message());
+      spdlog::get("github_sync")
+          ->error("GET {} failed: {}", Url, Response.error().message());
       continue;
     }
 
@@ -84,10 +88,11 @@ auto updateRepositories(
         Stats, Response->response_body
     );
     if (ParseError) {
-      spdlog::error(
-          "Parse failed: {}",
-          glz::format_error(ParseError, Response->response_body)
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "Parse failed: {}",
+              glz::format_error(ParseError, Response->response_body)
+          );
       continue;
     }
 
@@ -98,7 +103,8 @@ auto updateRepositories(
     // Traffic Metrics
     Response = Client->get(std::format("{}/traffic/clones", Url), Headers);
     if (!Response) {
-      spdlog::error("GET {} failed: {}", Url, Response.error().message());
+      spdlog::get("github_sync")
+          ->error("GET {} failed: {}", Url, Response.error().message());
       continue;
     }
 
@@ -107,10 +113,11 @@ auto updateRepositories(
         TrafficStats, Response->response_body
     );
     if (ParseError) {
-      spdlog::error(
-          "Parse failed: {}",
-          glz::format_error(ParseError, Response->response_body)
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "Parse failed: {}",
+              glz::format_error(ParseError, Response->response_body)
+          );
       continue;
     }
 
@@ -118,7 +125,8 @@ auto updateRepositories(
 
     Response = Client->get(std::format("{}/traffic/views", Url), Headers);
     if (!Response) {
-      spdlog::error("GET {} failed: {}", Url, Response.error().message());
+      spdlog::get("github_sync")
+          ->error("GET {} failed: {}", Url, Response.error().message());
       continue;
     }
 
@@ -126,31 +134,36 @@ auto updateRepositories(
         TrafficStats, Response->response_body
     );
     if (ParseError) {
-      spdlog::error(
-          "Parse failed: {}",
-          glz::format_error(ParseError, Response->response_body)
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "Parse failed: {}",
+              glz::format_error(ParseError, Response->response_body)
+          );
       continue;
     }
 
     Repository.Views += TrafficStats.count;
 
-    spdlog::info(
-        "Repo: ID: {}, Name: {}, AccountId: {}, Clones: {}, Forks: {}, "
-        "Stars: {}, Subscribers: {}, Views: {}",
-        Repository.Id,
-        Repository.Name,
-        Repository.AccountId,
-        Repository.Clones,
-        Repository.Forks,
-        Repository.Stars,
-        Repository.Subscribers,
-        Repository.Views
-    );
+    spdlog::get("github_sync")
+        ->info(
+            "Repo: ID: {}, Name: {}, AccountId: {}, Clones: {}, Forks: {}, "
+            "Stars: {}, Subscribers: {}, Views: {}",
+            Repository.Id,
+            Repository.Name,
+            Repository.AccountId,
+            Repository.Clones,
+            Repository.Forks,
+            Repository.Stars,
+            Repository.Subscribers,
+            Repository.Views
+        );
     if (auto Result = Database.update(Repository); !Result) {
-      spdlog::error(
-          "DB update failed for {}: {}", Repository.Id, Result.error().Message
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "DB update failed for {}: {}",
+              Repository.Id,
+              Result.error().Message
+          );
     }
   }
   return {};
@@ -180,7 +193,7 @@ auto updateAccounts(
 
   // Validate client is initialized
   if (!Client) {
-    spdlog::error("HTTP Client is null");
+    Log()->error("HTTP Client is null");
     return std::unexpected(core::Error{"Client initialization failed"});
   }
 
@@ -189,12 +202,13 @@ auto updateAccounts(
         std::format("https://api.github.com/orgs/{}", Account.Name);
 
     // Log the request
-    spdlog::debug("Making HTTP GET request to: {}", Url);
+    Log()->debug("Making HTTP GET request to: {}", Url);
 
     // Repo Stats API
     auto Response = Client->get(Url, Headers);
     if (!Response) {
-      spdlog::error("GET {} failed: {}", Url, Response.error().message());
+      spdlog::get("github_sync")
+          ->error("GET {} failed: {}", Url, Response.error().message());
       continue;
     }
 
@@ -203,25 +217,28 @@ auto updateAccounts(
         Stats, Response->response_body
     );
     if (ParseError) {
-      spdlog::error(
-          "Parse failed: {}",
-          glz::format_error(ParseError, Response->response_body)
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "Parse failed: {}",
+              glz::format_error(ParseError, Response->response_body)
+          );
       continue;
     }
 
     Account.Followers += Stats.followers;
 
-    spdlog::info(
-        "Account: ID: {}, Name: {}, Followers: {}",
-        Account.Id,
-        Account.Name,
-        Account.Followers
-    );
+    spdlog::get("github_sync")
+        ->info(
+            "Account: ID: {}, Name: {}, Followers: {}",
+            Account.Id,
+            Account.Name,
+            Account.Followers
+        );
     if (auto Result = Database.update(Account); !Result) {
-      spdlog::error(
-          "DB update failed for {}: {}", Account.Id, Result.error().Message
-      );
+      spdlog::get("github_sync")
+          ->error(
+              "DB update failed for {}: {}", Account.Id, Result.error().Message
+          );
     }
   }
   return {};

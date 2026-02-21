@@ -1,431 +1,305 @@
-# ICICLE Insights Architecture
+# Architecture
 
-## Overview
-
-ICICLE Insights is a C++23 HTTP server that collects metrics about ICICLE project components from Git platforms and container registries. The application follows a layered architecture with clear separation of concerns.
-
-```mermaid
-graph TB
-    Main["main()<br/>(insights.cpp - entry point)"]
-
-    Main --> Router["Router<br/>(git/router)"]
-    Main --> Database["Database<br/>(db/db)"]
-    Main --> Scheduler["Task Scheduler<br/>(git/scheduler)"]
-
-    Router --> Handlers["Handlers<br/>(lambdas)"]
-    Database --> PostgreSQL["PostgreSQL"]
-    Scheduler --> Tasks["Task Runner<br/>(git/tasks)"]
-
-    Router -.uses.-> Database
-    Scheduler -.uses.-> Database
-    Tasks -.uses.-> Database
-
-    style Main fill:#FFD700
-    style Router fill:#87CEEB
-    style Database fill:#90EE90
-    style Scheduler fill:#DDA0DD
-    style PostgreSQL fill:#98FB98
-    style Tasks fill:#FFB6C6
-```
-
-## Core Patterns
-
-### Error Handling with `std::expected<T, E>`
-
-The codebase uses C++23 `std::expected<T, Error>` directly for error handling instead of exceptions at API boundaries.
-
-```cpp
-// core/result.hpp
-namespace insights::core {
-  struct Error { std::string Message; };
-
-  // Note: Result<T> type alias was removed - use std::expected directly
-  // This makes the standard library usage explicit and improves code clarity
-}
-```
-
-Usage pattern:
-```cpp
-// Function signature shows explicit error type
-std::expected<Platform, core::Error> result = Database->create(entity);
-
-if (!result) {
-    spdlog::error(result.error().Message);
-    return std::unexpected(result.error());
-}
-
-auto entity = result.value();
-```
-
-**Why `std::expected` instead of exceptions:**
-- ✅ **Explicit error handling** - Can't ignore errors (won't compile)
-- ✅ **Zero overhead** - No exception unwinding in hot paths
-- ✅ **Type-safe** - Error type is part of function signature
-- ✅ **Standard library** - No custom types, better tooling support
-- ✅ **Self-documenting** - `std::expected<T, Error>` shows function can fail
-
-**Common patterns:**
-```cpp
-// Creating errors
-return std::unexpected(core::Error{"Database connection failed"});
-
-// Propagating errors
-if (!dbResult) {
-    return std::unexpected(dbResult.error());  // Forward the error
-}
-
-// Early returns for errors
-std::expected<void, core::Error> updateData() {
-    auto step1 = doStep1();
-    if (!step1) return std::unexpected(step1.error());
-
-    auto step2 = doStep2();
-    if (!step2) return std::unexpected(step2.error());
-
-    return {};  // Success (void expected)
-}
-```
-
-### Database Connection Management
-
-The `Database` struct wraps a `pqxx::connection` for PostgreSQL access.
-
-**Why `shared_ptr<Database>`?**
-
-```cpp
-static std::expected<std::shared_ptr<Database>, core::Error> connect(const std::string &ConnString);
-```
-
-1. **Non-movable connection**: `pqxx::connection` cannot be moved or copied. Returning by value would require a move, which fails.
-
-2. **Shared access**: Multiple HTTP route handlers (lambdas) need access to the same database connection:
-   ```cpp
-   Router.get("/platforms", [Database](...) { Database->getAll<Platform>(); });
-   Router.post("/platforms", [Database](...) { Database->create(platform); });
-   ```
-
-3. **Lifetime safety**: `shared_ptr` ensures the Database lives as long as any handler needs it. The type system enforces this - no manual lifetime reasoning required.
-
-**Alternative considered**: Reference capture `[&Database]` would work if the Database outlives all handlers, but requires manual lifetime management and is error-prone.
-
-### HTTP Routing
-
-Routes are registered as lambdas that capture the shared Database pointer:
-
-```cpp
-std::expected<void, core::Error> registerPlatformRoutes(
-    glz::http_router &Router,
-    std::shared_ptr<db::Database>& Database
-) {
-    using enum core::HttpStatus;
-
-    Router.get("/platforms", [Database](const glz::request &Request,
-                                         glz::response &Response) {
-        Response.status(static_cast<int>(Ok))
-                .json(Database->getAll<git::models::Platform>());
-    });
-
-    return {};
-}
-```
-
-Key points:
-- Lambdas capture `Database` by value (copies the `shared_ptr`, not the Database)
-- Each handler owns a reference count to the Database
-- `HttpStatus` enum avoids magic numbers
-
-### Generic Database Operations
-
-The Database uses templates with a `DbEntity` concept and traits for type-safe CRUD:
-
-```cpp
-template <core::DbEntity T>
-std::expected<T, core::Error> create(const T &Entity);
-
-template <core::DbEntity T>
-std::expected<T, core::Error> get(const std::string &Id);
-
-template <core::DbEntity T>
-std::expected<std::vector<T>, core::Error> getAll();
-```
-
-Each entity type specializes `DbTraits<T>`:
-
-```cpp
-template <> struct DbTraits<git::models::Platform> {
-    static constexpr std::string_view TableName = "git_platforms";
-    static constexpr std::string_view Columns = "name, clones, ...";
-
-    static auto toParams(const Platform &p) {
-        return std::make_tuple(p.Name, p.Clones, ...);
-    }
-
-    static Platform fromRow(const pqxx::row &Row) { ... }
-};
-```
-
-This provides:
-- Type-safe database operations
-- No SQL string building at call sites
-- Compile-time table/column mapping
-
-### Background Task Scheduler
-
-The task scheduler runs periodic background jobs without blocking HTTP requests.
-
-**Architecture:**
-
-```mermaid
-graph TB
-    subgraph "Main Thread"
-        A[io_context] --> B[HTTP Server]
-        A --> C[ASIO Timer]
-    end
-
-    subgraph "Task System"
-        C --> D[TaskScheduler]
-        D --> E[asio::thread_pool]
-    end
-
-    subgraph "Task Pipeline"
-        E --> F[updateRepositories]
-        F --> G[updateAccounts]
-        G --> H[updatePlatforms]
-    end
-
-    subgraph "Data Sources"
-        F --> I[GitHub API]
-        F --> J[GitLab API]
-        F --> K[Bitbucket API]
-    end
-
-    subgraph "Storage"
-        H --> L[(PostgreSQL)]
-        G --> L
-        F --> L
-    end
-
-    style A fill:#90EE90
-    style B fill:#90EE90
-    style C fill:#FFD700
-    style E fill:#87CEEB
-    style F fill:#DDA0DD
-    style G fill:#DDA0DD
-    style H fill:#DDA0DD
-```
-
-**Key Components:**
-
-1. **TaskScheduler** (`git/scheduler.hpp`)
-   - Manages ASIO `steady_timer` for periodic execution
-   - Posts work to thread pool asynchronously
-   - Configurable interval (default: 2 weeks)
-
-2. **Task Pipeline** (`git/tasks.hpp`)
-   - `updateRepositories()`: Fetch metrics from Git APIs
-   - `updateAccounts()`: Aggregate repository data to accounts
-   - `updatePlatforms()`: Aggregate account data to platforms
-   - `runAll()`: Orchestrates the full pipeline
-
-3. **Thread Pool** (`asio::thread_pool`)
-   - Separate worker threads for heavy I/O
-   - Prevents blocking the main event loop
-   - Configurable pool size
-
-**Execution Model:**
-
-```cpp
-// Pseudo-code of scheduler operation
-void TaskScheduler::onTimerExpired() {
-  // Post to thread pool - returns immediately
-  asio::post(WorkerPool, [Database]() {
-    // Runs on worker thread (non-blocking)
-    tasks::runAll(*Database);
-  });
-
-  // Main thread continues immediately
-  scheduleNext();  // Set next timer
-}
-```
-
-**Non-Blocking Guarantee:**
-- Timer callback returns in microseconds
-- Heavy work (API calls, DB updates) runs on worker threads
-- HTTP requests remain responsive during task execution
+ICICLE Insights is a C++23 HTTP server that collects and stores metrics about ICICLE project
+components from various platforms. It tracks repositories and accounts with platform-level
+statistics such as stars, forks, clones, views, and watchers. The server is built on Asio for
+async I/O, glaze for HTTP routing and JSON, and libpqxx for PostgreSQL access. Background sync
+tasks share the same io_context as the HTTP server, avoiding the need for a separate thread pool
+or scheduler infrastructure.
 
 ## Module Structure
 
 ```
-include/
+include/insights/
 ├── core/
-│   ├── config.hpp      # Environment configuration
-│   ├── http.hpp        # HTTP status codes enum
-│   ├── result.hpp      # Result<T> type alias
-│   └── traits.hpp      # DbEntity concept, DbTraits
+│   ├── config.hpp      # Config struct: Host, Port, DatabaseUrl, GitHubToken, LogDir, LogLevel
+│   ├── http.hpp        # HttpStatus enum (Ok, Created, BadRequest, NotFound, InternalServerError)
+│   ├── logging.hpp     # setupLogging(Config), createLogger(name, Config)
+│   ├── result.hpp      # Error struct { string Message }
+│   ├── routes.hpp      # registerCoreRoutes declaration
+│   └── scheduler.hpp   # scheduleRecurringTask(Timer, Name, InitialDelay, Interval, Task)
 ├── db/
-│   └── db.hpp          # Database struct and operations
-├── git/
-│   ├── models.hpp      # Platform, Account, Repository
-│   ├── router.hpp      # Route registration
-│   ├── tasks.hpp       # Background task pipeline
-│   └── scheduler.hpp   # Periodic task scheduler
-├── containers/
-│   └── models.hpp      # Container registry models
+│   └── db.hpp          # Database struct, DbTraits<T> specializations, DbEntity concept
+├── github/
+│   ├── models.hpp      # Account, Repository models
+│   ├── responses.hpp   # GitHubRepoStatsResponse, GitHubOrgStatsResponse
+│   ├── routes.hpp      # CreateAccountSchema, CreateRepositorySchema, OutputAccountSchema,
+│   │                   # OutputRepositorySchema, registerRoutes
+│   └── tasks.hpp       # syncStats, updateRepositories, updateAccounts
+├── ghcr/
+│   └── models.hpp      # Container registry models (future)
 └── server/
-    └── server.hpp      # Server initialization
+    ├── dependencies.hpp
+    └── middleware/
+        ├── logging.hpp  # createLoggingMiddleware()
+        └── response.hpp
 
 src/
-├── insights.cpp        # Entry point
-├── db/
-│   └── db.cpp          # Database implementation
-└── git/
-    ├── router.cpp      # Route handlers
-    ├── tasks.cpp       # Task implementations
-    └── scheduler.cpp   # Scheduler implementation
+├── insights.cpp         # Entry point
+├── core/
+│   └── routes.cpp       # /health and /routes endpoints, namespace insights::core
+└── github/
+    ├── routes.cpp       # GitHub route handlers, namespace insights::github
+    └── tasks.cpp        # GitHub sync pipeline, namespace insights::github::tasks
 ```
 
-## Data Model
+## Core Patterns
 
-Parallel hierarchies for Git and Container platforms:
+### Error Handling
 
-```
-Platform (GitHub, GitLab, DockerHub)
-    └── Account (user or organization)
-            └── Repository (individual repo/image)
-```
+The project uses C++23 `std::expected<T, E>` throughout. The `Error` struct in
+`include/insights/core/result.hpp` carries a single `string Message` field. Route handlers and
+database operations return `Result<T>` (aliased to `std::expected<T, Error>`) and propagate
+errors without throwing exceptions.
 
-Each level aggregates metrics:
-- **Git**: stars, forks, clones, views, watchers, followers
-- **Containers**: pulls, stars
+```cpp
+// core/result.hpp
+struct Error {
+    std::string Message;
+};
 
-## System Flows
-
-### HTTP Request Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server
-    participant Router
-    participant Handler
-    participant Database
-    participant PostgreSQL
-
-    Client->>Server: HTTP Request
-    Server->>Router: Route matching
-    Router->>Handler: Execute lambda
-    Handler->>Database: getAll<Platform>()
-    Database->>PostgreSQL: SQL query
-    PostgreSQL-->>Database: Result set
-    Database-->>Handler: Result<vector<Platform>>
-    Handler->>Handler: Check result
-    Handler-->>Server: JSON response
-    Server-->>Client: HTTP Response
+template <typename T>
+using Result = std::expected<T, Error>;
 ```
 
-**Steps:**
-1. HTTP request arrives at server
-2. Router matches path to handler lambda
-3. Lambda has captured `shared_ptr<Database>`
-4. Handler calls Database methods (create, get, getAll, etc.)
-5. Database executes SQL via `pqxx`, returns `Result<T>`
-6. Handler checks result, serializes response as JSON
+Callers use monadic operations (`and_then`, `transform`, `or_else`) or check `.has_value()`
+before accessing the result:
 
-### Background Task Flow
-
-```mermaid
-sequenceDiagram
-    participant Main as Main Thread<br/>(io_context)
-    participant Timer as ASIO Timer
-    participant Scheduler as TaskScheduler
-    participant Pool as Worker Pool
-    participant Tasks as git::tasks
-    participant DB as Database
-    participant APIs as External APIs<br/>(GitHub/GitLab)
-
-    Main->>Timer: Start with 2-week interval
-
-    loop Every 2 weeks
-        Timer->>Scheduler: Timer expired
-        Scheduler->>Pool: asio::post(runTasks)
-        Scheduler->>Timer: Schedule next run
-        Scheduler-->>Main: Return (non-blocking!)
-
-        Note over Main: HTTP server continues<br/>serving requests
-
-        Pool->>Tasks: runAll(Database)
-        Tasks->>Tasks: updateRepositories()
-        Tasks->>APIs: Fetch metrics
-        APIs-->>Tasks: Repository data
-        Tasks->>DB: Update records
-
-        Tasks->>Tasks: updateAccounts()
-        Tasks->>DB: Aggregate & update
-
-        Tasks->>Tasks: updatePlatforms()
-        Tasks->>DB: Aggregate & update
-
-        Tasks-->>Pool: Complete
-        Pool->>Main: Log completion
-    end
+```cpp
+auto Account = Db->get<github::Account>(Id);
+if (!Account) {
+    return glz::response{HttpStatus::NotFound, Account.error().Message};
+}
 ```
 
-**Steps:**
-1. Timer fires every 2 weeks
-2. Scheduler posts work to thread pool (non-blocking)
-3. Main thread continues serving HTTP requests
-4. Worker thread executes task pipeline:
-   - Fetch data from Git platform APIs
-   - Update repository records
-   - Aggregate to account level
-   - Aggregate to platform level
-5. Task completion logged on main thread
+No exceptions cross API boundaries. Database functions, HTTP client calls, and task functions all
+return `Result<T>` or `void` with logged errors.
 
-## Key Dependencies
+### Database Connection Management
 
-| Library | Purpose |
-|---------|---------|
-| **asio** | Async I/O, networking, timers, thread pools |
-| **glaze** | JSON serialization, HTTP routing (supports async) |
-| **libpqxx** | PostgreSQL C++ client |
-| **spdlog** | Logging |
+The `Database` struct in `db/db.hpp` wraps a `pqxx::connection` and exposes generic CRUD
+operations. Two separate `shared_ptr<Database>` instances are created at startup: one for HTTP
+route handlers (`ServerDatabase`) and one for background sync tasks (`TasksDatabase`). Keeping
+them separate avoids contention between request handling and long-running sync operations.
 
-## Async Strategy
+```cpp
+auto ServerDatabase = std::make_shared<db::Database>(Config.DatabaseUrl);
+auto TasksDatabase  = std::make_shared<db::Database>(Config.DatabaseUrl);
+```
 
-### Current State: Hybrid Model
+Route handlers capture `ServerDatabase` by value through lambda closures registered with the
+router. Task functions receive `TasksDatabase` as a parameter.
+
+### HTTP Routing
+
+Routes are registered using glaze's `http_router`. Each module exposes a `registerRoutes`
+function that takes the router and a database connection:
+
+```cpp
+// github/routes.hpp
+void registerRoutes(glz::router& Router, std::shared_ptr<db::Database> Db);
+```
+
+Handlers are lambdas that capture the database pointer and return a `glz::response`:
+
+```cpp
+Router.on<glz::GET>(/api/github/accounts/:id, [Db](glz::request& Req) {
+    auto Id    = Req.params[id];
+    auto Entry = Db->get<github::Account>(Id);
+    if (!Entry) {
+        return glz::response{HttpStatus::NotFound, Entry.error().Message};
+    }
+    return glz::response{HttpStatus::Ok, *Entry};
+});
+```
+
+Current routes:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/health` | Database ping, returns server status |
+| GET    | `/routes` | Lists all registered routes |
+| GET    | `/api/github/accounts` | List all GitHub accounts |
+| POST   | `/api/github/accounts` | Create a GitHub account |
+| GET    | `/api/github/accounts/:id` | Get a GitHub account by ID |
+| DELETE | `/api/github/accounts/:id` | Delete a GitHub account |
+| GET    | `/api/github/repos/:id` | Get a GitHub repository by ID |
+| POST   | `/api/github/repos/:id` | Create a GitHub repository |
+| PATCH  | `/api/github/repos/:id` | Update a GitHub repository |
+| DELETE | `/api/github/repos/:id` | Delete a GitHub repository |
+
+### Generic Database Operations with DbTraits
+
+The database layer uses a `DbTraits<T>` specialization pattern to associate each model type with
+its table name, column list, insert statement, and result-set parser. A `DbEntity` concept
+constrains template parameters to types that have a `DbTraits` specialization.
+
+```cpp
+template <DbEntity T>
+Result<T> get(std::string_view Id);
+
+template <DbEntity T>
+Result<std::vector<T>> list();
+
+template <DbEntity T>
+Result<T> create(const T& Entity);
+
+template <DbEntity T>
+Result<void> remove(std::string_view Id);
+```
+
+Adding support for a new model requires only a `DbTraits<MyModel>` specialization — no new
+database functions.
+
+### Background Task Scheduler
+
+There is no `TaskScheduler` class. Background tasks are scheduled using the free function
+`scheduleRecurringTask` from `core/scheduler.hpp`:
+
+```cpp
+void scheduleRecurringTask(
+    std::shared_ptr<asio::steady_timer> Timer,
+    std::string                          Name,
+    std::chrono::duration<...>           InitialDelay,
+    std::chrono::duration<...>           Interval,
+    std::function<void()>                Task
+);
+```
+
+The function arms the timer for `InitialDelay`, runs `Task()`, then re-arms for `Interval` on
+each subsequent expiry. The timer is owned by the caller via `shared_ptr` so it stays alive for
+the process lifetime.
+
+The server and all timers share one `asio::io_context` (`IOContext`). The HTTP server is started
+with `Server.start(0)` — the `0` tells glaze not to spin up internal worker threads. Instead,
+the application creates `hardware_concurrency()` threads that all call `IOContext->run()`:
 
 ```mermaid
 graph LR
-    A[Synchronous<br/>HTTP Handlers] -.Future.-> B[Async HTTP<br/>with Coroutines]
-    C[Async<br/>Task Scheduler] --> D[Thread Pool<br/>Execution]
+    IOCtx[asio::io_context]
+    T1[Thread 1]
+    T2[Thread 2]
+    TN["Thread N\nhardware_concurrency()"]
+    HTTP["HTTP Server\nstart(0)"]
+    Timer["steady_timer\nGitHubSync"]
 
-    style A fill:#FFD700
-    style B fill:#90EE90
-    style C fill:#90EE90
-    style D fill:#90EE90
+    T1 -->|run| IOCtx
+    T2 -->|run| IOCtx
+    TN -->|run| IOCtx
+    HTTP --> IOCtx
+    Timer --> IOCtx
 ```
 
-**Phase 1 (Current):** Async background tasks, sync HTTP handlers
-- Background tasks use ASIO thread pool for non-blocking execution
-- HTTP handlers remain synchronous for simplicity
-- Database operations are synchronous (block per-request)
+```cpp
+// insights.cpp (simplified)
+auto IOContext   = std::make_shared<asio::io_context>();
+auto SyncTimer   = std::make_shared<asio::steady_timer>(*IOContext);
+auto ThreadCount = std::thread::hardware_concurrency();
+std::vector<std::thread> Workers;
 
-**Phase 2 (Future):** Full async with coroutines
-- Migrate HTTP handlers to `asio::awaitable<void>`
-- Add async database operations using C++20 coroutines
-- Unified async model across entire application
+Server.start(0);  // 0 = no internal threads; use our io_context
 
-See [docs/async-task-patterns.md](async-task-patterns.md) for detailed async patterns.
+scheduleRecurringTask(
+    SyncTimer,
+    github_sync,
+    seconds(0),           // fire immediately on startup
+    weeks(2),             // repeat every two weeks
+    [TasksDatabase, &Config]() {
+        github::tasks::syncStats(TasksDatabase, Config);
+    }
+);
 
-## Design Decisions Summary
+for (unsigned I = 0; I < ThreadCount; ++I) {
+    Workers.emplace_back([&IOContext]() { IOContext->run(); });
+}
+for (auto& W : Workers) W.join();
+```
+
+Signal handling (SIGINT/SIGTERM) calls `Server.stop()`, `IOContext->stop()`, and
+`spdlog::shutdown()` before the process exits.
+
+## Data Model
+
+The data model has two levels:
+
+```mermaid
+erDiagram
+    Account {
+        text Id PK
+        text Name
+        text Url
+        int  Followers
+    }
+    Repository {
+        text Id PK
+        text Name
+        text Url
+        text AccountId FK
+        int  Stars
+        int  Forks
+        int  Clones
+        int  Views
+        int  Subscribers
+    }
+    Account ||--o{ Repository : owns
+```
+
+- **Account** — a GitHub organization or user. Fields include `Id`, `Name`, `Url`, `Followers`.
+- **Repository** — a tracked repository belonging to an account. Fields include `Id`, `Name`,
+  `Url`, `AccountId`, plus metrics columns (stars, forks, clones, views, subscribers).
+
+Only the `github/` module is active. The `ghcr/` module directory exists as a placeholder for
+future container registry support.
+
+## HTTP Request Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant MW as Logging Middleware
+    participant R as glz::router
+    participant H as Handler Lambda
+    participant DB as PostgreSQL
+
+    C->>MW: TCP request
+    MW->>R: method + path
+    R->>H: matched route (runs on IOContext thread)
+    H->>DB: pqxx blocking query
+    DB-->>H: result rows
+    H-->>MW: glz::response
+    MW-->>C: HTTP response (status logged)
+```
+
+1. An incoming TCP connection is accepted by glaze's `http_server`.
+2. The logging middleware records the method, path, and response status.
+3. The router matches the path against registered handlers.
+4. The matched handler lambda executes on one of the `IOContext` worker threads.
+5. The handler calls `Database` methods (blocking libpqxx calls on the same thread).
+6. The handler returns a `glz::response` which glaze serializes and sends.
+
+Because database calls are synchronous, each request occupies a worker thread for its duration.
+The `hardware_concurrency()` thread pool provides parallelism without starving background timers,
+which are also driven by the same `io_context`.
+
+## Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| **asio** | Async I/O, io_context, steady_timer, signal_set |
+| **glaze** | HTTP server, router, JSON serialization/deserialization |
+| **libpq / libpqxx** | PostgreSQL C and C++ clients |
+| **openssl** | TLS for outbound HTTP client requests |
+| **spdlog** | Structured logging with named loggers and file sinks |
+
+## Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| `std::expected` over exceptions | Explicit error handling, no overhead |
-| `shared_ptr<Database>` | Non-movable connection + shared handler access |
-| Template + traits for DB ops | Type safety, no runtime SQL building |
-| `HttpStatus` enum | Avoid magic numbers, self-documenting code |
-| Minimal includes | Faster compilation, clearer dependencies |
-| Thread pool for background tasks | Non-blocking execution, responsive HTTP server |
-| ASIO timers over cron | Integrated lifecycle, easier testing |
-| Sync HTTP → Async migration path | Start simple, add complexity when needed |
+| `std::expected` instead of exceptions | Zero-cost on the happy path; forces callers to handle errors explicitly at API boundaries |
+| Two database connections | Prevents long-running sync tasks from blocking request handlers |
+| Shared io_context for server and timers | Single thread pool serves both HTTP and scheduled tasks; no extra threads or synchronization |
+| `Server.start(0)` with manual thread pool | Full control over concurrency; threads are joined on shutdown for a clean exit |
+| Free function scheduler, no class | Simpler than a scheduler object; ownership is explicit via the `shared_ptr<steady_timer>` |
+| Per-component named loggers | Each subsystem (server, github_sync) writes to its own log file and to shared stdout |
+| `flush_on(warn)` + `flush_every(1s)` | Captures errors immediately while keeping I/O overhead low during normal operation |
+| glaze non-TLS mode (`http_server<false>`) | TLS termination is delegated to a reverse proxy in production |

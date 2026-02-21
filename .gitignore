@@ -51,4 +51,4 @@ CMakePresets.json
 .clinerules
 .claude/
 
-*env.json
+*.env.json

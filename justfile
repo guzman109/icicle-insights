@@ -36,3 +36,9 @@ clean-build:
 # Run the application
 run:
     {{ BUILD_DIR }}/icicle-insights
+
+docker-build:
+  docker buildx build --platform linux/amd64 -t ghcr.io/icicle-ai/insights:latest .
+
+docker-run:
+  docker run -itd -p 3000:3000 --env-file=.env --name insights ghcr.io/icicle-ai/insights:latest

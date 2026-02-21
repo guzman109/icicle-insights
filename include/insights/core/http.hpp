@@ -1,12 +1,12 @@
 #pragma once
 
 #include "glaze/core/opts.hpp"
+
 #include <cstdint>
 
 namespace insights::core {
 
 inline constexpr auto JsonOpts = glz::opts{.error_on_missing_keys = true};
-
 
 enum class HttpStatus : uint16_t {
   // 2xx Success

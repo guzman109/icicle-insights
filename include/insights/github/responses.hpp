@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-namespace insights::git::tasks::responses {
+namespace insights::github::tasks::responses {
 struct GitHubRepoStatsResponse {
   int stargazers_count;
   int forks_count;
@@ -20,4 +20,4 @@ struct GitHubRepoRefferersResponse {
   int unique;
 };
 
-} // namespace insights::git::tasks::responses
+} // namespace insights::github::tasks::responses

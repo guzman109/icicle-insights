@@ -1,5 +1,5 @@
 #include "insights/server/server.hpp"
-#include "insights/server/middleware.hpp"
+#include "insights/server/middleware/logging.hpp"
 #include "spdlog/spdlog.h"
 #include <expected>
 

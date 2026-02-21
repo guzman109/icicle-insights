@@ -8,7 +8,7 @@
 #include <spdlog/spdlog.h>
 #include <string>
 #include <utility>
-
+#include <vector>
 #include "insights/core/result.hpp"
 #include "insights/core/traits.hpp"
 
@@ -143,11 +143,6 @@ struct Database {
           std::format("SELECT * FROM {}", core::DbTraits<T>::TableName);
 
       auto Res = Tx.exec(pqxx::zview(Query));
-
-      if (Res.empty()) {
-        spdlog::debug("Database::getAll<{}> - No entities found", core::DbTraits<T>::TableName);
-        return std::unexpected(core::Error{"Not found"});
-      }
 
       std::vector<T> Results;
       for (const auto &Row : Res) {

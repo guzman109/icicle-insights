@@ -9,6 +9,7 @@ Checks: >
   readability-*,
   -modernize-use-trailing-return-type,
   -readability-identifier-length,
+  -readability-function-cognitive-complexity,
   -cppcoreguidelines-avoid-magic-numbers,
   -readability-magic-numbers,
   -misc-non-private-member-variables-in-classes

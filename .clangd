@@ -4,7 +4,7 @@ CompileFlags:
     - "-Wall"
     - "-Wextra"
     - "-Wpedantic"
-  CompilationDatabase: .
+  CompilationDatabase: build
 
 # Diagnostics are configured in .clang-tidy
 Diagnostics:

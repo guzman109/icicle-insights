@@ -22,7 +22,7 @@ find_package(libpqxx REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-file(GLOB git_SRC src/git/*.cpp)
+file(GLOB git_SRC src/github/*.cpp)
 file(GLOB server_SRC src/server/*.cpp)
 
 # Executable

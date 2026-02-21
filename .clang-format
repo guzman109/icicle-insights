@@ -1,6 +1,6 @@
 BasedOnStyle: LLVM
 Language: Cpp
-Standard: c++23
+Standard: Latest
 
 ColumnLimit: 80
 IndentWidth: 2
@@ -29,7 +29,7 @@ AllowShortFunctionsOnASingleLine: Inline
 AllowShortLambdasOnASingleLine: All
 
 # Alignment
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: BlockIndent
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Right
@@ -38,8 +38,8 @@ AlignTrailingComments: true
 
 # Breaking
 AllowAllParametersOfDeclarationOnNextLine: true
-BinPackArguments: true
-BinPackParameters: true
+BinPackArguments: false
+BinPackParameters: false
 BreakBeforeBinaryOperators: None
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon

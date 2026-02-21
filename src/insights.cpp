@@ -1,3 +1,13 @@
+#include "insights/core/config.hpp"
+#include "insights/core/scheduler.hpp"
+#include "insights/db/db.hpp"
+#include "insights/github/routes.hpp"
+#include "insights/github/tasks.hpp"
+#include "insights/server/middleware/logging.hpp"
+#include "insights/server/routes.hpp"
+
+#include "spdlog/spdlog.h"
+
 #include <asio/any_io_executor.hpp>
 #include <asio/io_context.hpp>
 #include <asio/signal_set.hpp>
@@ -7,17 +17,9 @@
 #include <glaze/net/http_router.hpp>
 #include <glaze/net/http_server.hpp>
 #include <memory>
+#include <string_view>
 #include <system_error>
 #include <thread>
-
-#include "insights/core/config.hpp"
-#include "insights/db/db.hpp"
-#include "insights/git/router.hpp"
-#include "insights/git/tasks.hpp"
-#include "insights/server/middleware.hpp"
-#include "insights/server/routes.hpp"
-#include "insights/server/server.hpp"
-#include "spdlog/spdlog.h"
 
 int main() {
   auto IOContext = std::make_shared<asio::io_context>();
@@ -48,8 +50,9 @@ int main() {
     return 1;
   }
 
-  spdlog::debug("Loaded config - Host: {}, Port: {}", Config->Host,
-                Config->Port);
+  spdlog::debug(
+      "Loaded config - Host: {}, Port: {}", Config->Host, Config->Port
+  );
 
   // auto Server = insights::server::initServer(Config->Host, Config->Port);
   // Initialize Insights HTTP Server
@@ -74,16 +77,16 @@ int main() {
   glz::http_router Router;
   spdlog::info("Registering routes:");
   insights::server::registerCoreRoutes(Router, ServerDatabase.value());
-  spdlog::info("GitRoutes");
-  glz::http_router GitRouter;
+  spdlog::info("GitHubRoutes");
+  glz::http_router GitHubRouter;
 
-  if (!insights::git::registerRoutes(GitRouter, ServerDatabase.value())) {
+  if (!insights::github::registerRoutes(GitHubRouter, ServerDatabase.value())) {
     spdlog::error("Failed registering git routes.");
   }
 
   // Mount the routers
   Server.mount("/", Router);
-  Server.mount("/api/git", GitRouter);
+  Server.mount("/api/github", GitHubRouter);
 
   // Start The Server (0 Worker Threads so we can run with ASIO shared IO
   // Context)
@@ -92,6 +95,14 @@ int main() {
   // Tasks
 
   // GitHub Metrics Sync Task
+
+  // Register Database Connection for Tasks
+  spdlog::info("Connecting to database.");
+  auto TasksDatabase = insights::db::Database::connect(Config->DatabaseUrl);
+  if (!TasksDatabase) {
+    spdlog::error(TasksDatabase.error().Message);
+    return 1;
+  }
 
   // Set Task Timer
   auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
@@ -102,48 +113,30 @@ int main() {
   std::chrono::weekday CurrentDay(Today);
 
   auto DaysUntilSunday = (7 - CurrentDay.c_encoding()) % 7;
-  auto InitialDelay = std::chrono::days(DaysUntilSunday);
-  // auto InitialDelay = std::chrono::seconds(0);
+  // auto InitialDelay = std::chrono::days(DaysUntilSunday);
+  auto InitialDelay = std::chrono::seconds(0);
+  auto Interval = std::chrono::weeks(2);
 
   GitHubSyncTimer->expires_after(InitialDelay);
 
-  // Register Database Connection for Tasks
-  spdlog::info("Connecting to database.");
-  auto TasksDatabase = insights::db::Database::connect(Config->DatabaseUrl);
-  if (!TasksDatabase) {
-    spdlog::error(TasksDatabase.error().Message);
-    return 1;
-  }
+  // Schedule the task
+  spdlog::info("GitHubSync ready and running every 2 weeks on Sunday.");
+  insights::core::scheduleRecurringTask(
+      GitHubSyncTimer, "GitHubSync", InitialDelay, std::chrono::weeks(2), [&] {
+        insights::github::tasks::syncStats(**TasksDatabase, *Config);
+      }
+  );
 
-  auto OnGitHubSync =
-      std::make_shared<std::function<void(const std::error_code &)>>();
-  // Test tasks module
-  *OnGitHubSync = [OnGitHubSync, GitHubSyncTimer, Config,
-                   TasksDatabase](const std::error_code &ErrorCode) {
-    if (ErrorCode) {
-      spdlog::error("Task failed with error: {}.", ErrorCode.message());
-      return;
-    }
-    spdlog::info("GitHub tasks...");
-    // Run Task
-    auto TasksResult = insights::git::tasks::runAll(
-        Config->GitHubToken, *TasksDatabase.value(), *Config);
-
-    GitHubSyncTimer->expires_after(std::chrono::weeks(2));
-    GitHubSyncTimer->async_wait(*OnGitHubSync);
-  };
-
-  GitHubSyncTimer->async_wait(*OnGitHubSync);
-
+  // Start All Threads (Server + Tasks)
   // Start the Thread pool.
   std::vector<std::thread> Threads;
   const size_t NumThreads = std::thread::hardware_concurrency();
   Threads.reserve(NumThreads);
 
-  spdlog::info("Server ready and listening on http://{}:{}", Config->Host,
-               Config->Port);
+  spdlog::info(
+      "Server ready and listening on http://{}:{}", Config->Host, Config->Port
+  );
 
-  spdlog::info("Tasks ready and running every 2 weeks on Sunday.");
   spdlog::info("Sharing {} threads.", NumThreads);
 
   asio::signal_set Signals(*IOContext, SIGINT, SIGTERM);

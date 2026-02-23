@@ -7,7 +7,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -106,3 +106,23 @@ jobs:
           tags: |
             ghcr.io/icicle-ai/insights:latest
             ghcr.io/icicle-ai/insights:${{ github.sha }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: icicle-insights-linux-amd64
+          path: dist
+
+      - name: Create tarball
+        run: tar -czf icicle-insights-linux-amd64.tar.gz -C dist .
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: icicle-insights-linux-amd64.tar.gz

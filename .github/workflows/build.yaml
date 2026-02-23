@@ -26,8 +26,8 @@ jobs:
             libc++-18-dev libc++abi-18-dev \
             curl ca-certificates \
             meson
-          sudo ln -s /usr/bin/clang-18 /usr/bin/clang
-          sudo ln -s /usr/bin/clang++-18 /usr/bin/clang++
+          sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-18 /usr/bin/clang++
           clang++-18 --version
 
       - name: Install Conan

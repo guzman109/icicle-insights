@@ -72,10 +72,6 @@ target_link_libraries(${PROJECT_NAME}
         OpenSSL::Crypto
 )
 
-# Statically link libc++ on Linux/Clang so the runtime container needs no LLVM packages.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_link_options(${PROJECT_NAME} PRIVATE -static-libstdc++ -lc++abi)
-endif()
 
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE

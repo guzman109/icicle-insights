@@ -8,6 +8,8 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
+    libc++1 \
+    libc++abi1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

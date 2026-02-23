@@ -20,18 +20,16 @@ jobs:
 
       - name: Install system build tools
         run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm-21.list
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build git pkg-config \
-            clang-21 lld-21 \
-            libc++-21-dev libc++abi-21-dev \
+            clang-18 lld-18 \
+            libc++-18-dev libc++abi-18-dev \
             curl ca-certificates \
             meson
-          sudo ln -sf /usr/bin/clang-21 /usr/bin/clang
-          sudo ln -sf /usr/bin/clang++-21 /usr/bin/clang++
-          clang++-21 --version
+          sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-18 /usr/bin/clang++
+          clang++-18 --version
 
       - name: Install Conan
         uses: conan-io/setup-conan@v1
@@ -40,22 +38,22 @@ jobs:
 
       - name: Conan install
         env:
-          CC: clang-21
-          CXX: clang++-21
+          CC: clang-18
+          CXX: clang++-18
         run: |
           conan install . \
             --build=missing \
             -s build_type=Release \
             -s compiler=clang \
-            -s compiler.version=21 \
+            -s compiler.version=18 \
             -s compiler.libcxx=libc++ \
             -s compiler.cppstd=23 \
             -of build
 
       - name: Configure (CMake + Conan toolchain)
         env:
-          CC: clang-21
-          CXX: clang++-21
+          CC: clang-18
+          CXX: clang++-18
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
@@ -76,7 +74,6 @@ jobs:
           name: icicle-insights-linux-amd64
           path: |
             build/icicle-insights
-            data/**
           if-no-files-found: error
 
   docker:

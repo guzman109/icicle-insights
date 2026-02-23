@@ -5,12 +5,14 @@
 # =============================================================================
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y wget ca-certificates \
+    && wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc \
+    && echo "deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-22 main" >> /etc/apt/sources.list.d/llvm-22.list \
+    && apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
-    libc++1-18 \
-    libc++abi1-18 \
-    ca-certificates \
+    libc++1-22 \
+    libc++abi1-22 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

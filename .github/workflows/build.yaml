@@ -19,16 +19,18 @@ jobs:
 
       - name: Install system build tools
         run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main" | sudo tee /etc/apt/sources.list.d/llvm-22.list
           sudo apt-get update
           sudo apt-get install -y \
             cmake ninja-build git pkg-config \
-            clang-18 lld-18 \
-            libc++-18-dev libc++abi-18-dev \
+            clang-22 lld-22 \
+            libc++-22-dev libc++abi-22-dev \
             curl ca-certificates \
             meson
-          sudo ln -sf /usr/bin/clang-18 /usr/bin/clang
-          sudo ln -sf /usr/bin/clang++-18 /usr/bin/clang++
-          clang++-18 --version
+          sudo ln -sf /usr/bin/clang-22 /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-22 /usr/bin/clang++
+          clang++-22 --version
 
       - name: Install Conan
         uses: conan-io/setup-conan@v1
@@ -37,22 +39,22 @@ jobs:
 
       - name: Conan install
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
         run: |
           conan install . \
             --build=missing \
             -s build_type=Release \
             -s compiler=clang \
-            -s compiler.version=18 \
+            -s compiler.version=22 \
             -s compiler.libcxx=libc++ \
             -s compiler.cppstd=23 \
             -of build
 
       - name: Configure (CMake + Conan toolchain)
         env:
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang-22
+          CXX: clang++-22
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \

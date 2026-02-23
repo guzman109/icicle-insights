@@ -3,13 +3,13 @@
 # 2. Build the Docker Image and copy the prebuilt binary over.
 # 3. Push Image to Pods. 
 # =============================================================================
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libpq5 \
-    libc++1 \
-    libc++abi1 \
+    libc++1-18 \
+    libc++abi1-18 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

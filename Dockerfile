@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY dist/build/icicle-insights ./icicle-insights
-RUN chmod +x ./icicle-insights
 
 # Set up non-root user for security
-RUN useradd -m icicle && \
+RUN chmod +x ./icicle-insights && \
+  useradd -m icicle && \
   mkdir -p /app/logs && \
   chown -R icicle:icicle /app
 USER icicle

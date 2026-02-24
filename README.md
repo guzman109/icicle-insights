@@ -88,7 +88,6 @@ just run          # start the server on http://localhost:3000
 | `GET` | `/api/github/repos` | List all repositories |
 | `POST` | `/api/github/repos` | Create a repository |
 | `GET` | `/api/github/repos/:id` | Get repository by ID |
-| `PATCH` | `/api/github/repos/:id` | Update repository |
 | `DELETE` | `/api/github/repos/:id` | Delete repository |
 
 ## Deployment

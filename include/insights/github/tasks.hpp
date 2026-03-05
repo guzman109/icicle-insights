@@ -23,7 +23,6 @@ auto updateAccounts(
     const core::Config &Config
 ) -> std::expected<void, core::Error>;
 
-// Orchestrator that runs the full pipeline: Repos → Accounts → Platforms
-auto syncStats(db::Database &Database, const core::Config &Config)
-    -> std::expected<void, core::Error>;
+// Orchestrator that runs the full pipeline: Repos → Accounts
+auto syncStats(const core::Config &Config) -> std::expected<void, core::Error>;
 } // namespace insights::github::tasks

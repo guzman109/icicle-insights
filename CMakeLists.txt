@@ -32,7 +32,10 @@ find_package(OpenSSL REQUIRED)
 # When Homebrew's OpenSSL is found (macOS), create it manually.
 if(NOT TARGET openssl::openssl)
     add_library(openssl::openssl INTERFACE IMPORTED)
-    target_link_libraries(openssl::openssl INTERFACE OpenSSL::SSL OpenSSL::Crypto)
+    target_link_libraries(
+        openssl::openssl
+        INTERFACE OpenSSL::SSL OpenSSL::Crypto
+    )
 endif()
 find_package(asio REQUIRED)
 find_package(spdlog REQUIRED)
@@ -42,27 +45,20 @@ find_package(libpqxx REQUIRED)
 # Sources
 # -------------------------
 file(GLOB core_SRC CONFIGURE_DEPENDS src/core/*.cpp)
-file(GLOB git_SRC  CONFIGURE_DEPENDS src/github/*.cpp)
+file(GLOB git_SRC CONFIGURE_DEPENDS src/github/*.cpp)
 
-add_executable(${PROJECT_NAME}
-    src/insights.cpp
-    ${core_SRC}
-    ${git_SRC}
-)
+add_executable(${PROJECT_NAME} src/insights.cpp ${core_SRC} ${git_SRC})
 
 # -------------------------
 # Includes (ONLY your code)
 # -------------------------
-target_include_directories(${PROJECT_NAME}
-    PRIVATE
-        src
-        include
-)
+target_include_directories(${PROJECT_NAME} PRIVATE src include)
 
 # -------------------------
 # Linking
 # -------------------------
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(
+    ${PROJECT_NAME}
     PRIVATE
         asio::asio
         glaze::glaze
@@ -72,8 +68,4 @@ target_link_libraries(${PROJECT_NAME}
         OpenSSL::Crypto
 )
 
-
-target_compile_definitions(${PROJECT_NAME}
-    PRIVATE
-        GLZ_ENABLE_SSL
-)
+target_compile_definitions(${PROJECT_NAME} PRIVATE GLZ_ENABLE_SSL)

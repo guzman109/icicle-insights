@@ -48,6 +48,12 @@ CREATE TABLE github_accounts (
     UNIQUE(name)
 );
 
+CREATE TABLE task_runs (
+    task_name   TEXT        PRIMARY KEY,
+    last_run_at TIMESTAMPTZ NOT NULL,
+    next_run_at TIMESTAMPTZ GENERATED ALWAYS AS (last_run_at + INTERVAL '2 weeks') STORED
+);
+
 CREATE TABLE github_repositories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,

@@ -11,53 +11,46 @@ set export := true
 default:
     @just --list
 
-# Install dependencies with Conan
 deps:
+    conan create conan-overlays/libpq
     conan install . --build=missing --output-folder={{ CONAN_DEPS_DIR }} -s compiler.cppstd=gnu23
 
 # Configure CMake build
-setup:
+cmake-setup:
     cmake -B {{ BUILD_DIR }} \
           -DCMAKE_TOOLCHAIN_FILE={{ CONAN_DEPS_DIR }}/conan_toolchain.cmake \
           -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_MAKE_PROGRAM=$(which ninja) \
           -G Ninja
 
 # Build the project
-build:
+cmake-build:
     cmake --build {{ BUILD_DIR }}
 
 # Full build from scratch
-full-build: deps setup build
+cmake: deps cmake-setup cmake-build
 
 # Clean and rebuild
-clean-build:
+cmake-clean:
     rm -rf build
-    just full-build
+    just cmake
 
 # Run the application
-run:
+local-run:
     {{ BUILD_DIR }}/icicle-insights
 
-docker-build:
-  docker buildx build --platform linux/amd64 -t ghcr.io/icicle-ai/insights:latest .
+build:
+    docker buildx build --platform linux/amd64 -t ghcr.io/icicle-ai/insights:latest .
 
-docker-run:
-  docker run -itd -p 3000:3000 --env-file=.env --name insights ghcr.io/icicle-ai/insights:latest
+run:
+    docker run -itd -p 3000:3000 --env-file=.env --name insights ghcr.io/icicle-ai/insights:latest
 
-act-build:
-  act -j docker \
-        --container-architecture linux/amd64 \
-        -P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 \
-        --secret GITHUB_TOKEN="$(gh auth token)" \
-        --env SSL_CERT_FILE= \
-        --env CURL_CA_BUNDLE= \
-        --env REQUESTS_CA_BUNDLE=
+start:
+    docker start insights
 
-act-linux:
-  act -j linux \
-        --container-architecture linux/amd64 \
-        -P ubuntu-24.04=ghcr.io/catthehacker/ubuntu:act-24.04 \
-        --secret GITHUB_TOKEN="$(gh auth token)" \
-        --env SSL_CERT_FILE= \
-        --env CURL_CA_BUNDLE= \
-        --env REQUESTS_CA_BUNDLE=
+stop:
+    docker stop insights
+
+rm:
+    docker rm insights
+

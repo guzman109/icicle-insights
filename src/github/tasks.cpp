@@ -46,7 +46,7 @@ auto updateRepositories(
   std::unordered_map<std::string, std::string> Headers = {
       {"Accept", "application/vnd.github+json"},
       {"Authorization", std::format("Bearer {}", Config.GitHubToken)},
-      {"User-Agent", "Glaze"},
+      {"User-Agent", "ICICLE-AI"},
       {"X-GitHub-Api-Version", "2022-11-28"},
   };
 
@@ -96,9 +96,9 @@ auto updateRepositories(
       continue;
     }
 
-    Repository.Forks += Stats.forks_count;
-    Repository.Stars += Stats.stargazers_count;
-    Repository.Subscribers += Stats.subscribers_count;
+    Repository.Forks = Stats.forks_count;
+    Repository.Stars = Stats.stargazers_count;
+    Repository.Subscribers = Stats.subscribers_count;
 
     // Traffic Metrics
     Response = Client->get(std::format("{}/traffic/clones", Url), Headers);
@@ -169,9 +169,6 @@ auto updateRepositories(
   return {};
 }
 
-// Account
-// - /orgs/<organization>
-// -- Followers
 auto updateAccounts(
     std::shared_ptr<glz::http_client> Client,
     db::Database &Database,
@@ -225,7 +222,7 @@ auto updateAccounts(
       continue;
     }
 
-    Account.Followers += Stats.followers;
+    Account.Followers = Stats.followers;
 
     spdlog::get("github_sync")
         ->info(
@@ -244,8 +241,14 @@ auto updateAccounts(
   return {};
 }
 
-auto syncStats(db::Database &Database, const core::Config &Config)
-    -> std::expected<void, core::Error> {
+auto syncStats(const core::Config &Config) -> std::expected<void, core::Error> {
+  // Open a fresh connection for this run — closed automatically at scope exit.
+  auto DatabaseResult = db::Database::connect(Config.DatabaseUrl);
+  if (!DatabaseResult) {
+    return std::unexpected(DatabaseResult.error());
+  }
+  auto &Database = **DatabaseResult;
+
   // Create HTTP client
   auto ClientResult = createClient(Config);
   if (!ClientResult) {
@@ -253,12 +256,24 @@ auto syncStats(db::Database &Database, const core::Config &Config)
   }
   auto Client = *ClientResult;
 
-  // Run the pipeline in order: Repos → Accounts → Platforms
+  // Run the pipeline in order: Repos → Accounts
   auto RepoResult = updateRepositories(Client, Database, Config);
   if (!RepoResult) {
     return RepoResult;
   }
-  return updateAccounts(Client, Database, Config);
+
+  auto AccountResult = updateAccounts(Client, Database, Config);
+  if (!AccountResult) {
+    return AccountResult;
+  }
+
+  // Record completion — Postgres regenerates next_run_at automatically.
+  auto RecordResult = Database.recordTaskRun("GitHubSync");
+  if (!RecordResult) {
+    Log()->warn("recordTaskRun failed: {}", RecordResult.error().Message);
+  }
+
+  return {};
 }
 
 } // namespace insights::github::tasks

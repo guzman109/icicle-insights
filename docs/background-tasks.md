@@ -89,25 +89,28 @@ Registered in `src/insights.cpp`:
 ```cpp
 auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
-// Fire on next Saturday, then every 2 weeks
-auto Now            = std::chrono::system_clock::now();
-auto Today          = std::chrono::floor<std::chrono::days>(Now);
-auto CurrentDay     = std::chrono::weekday(Today);
-auto DaysUntilSat   = (6 - CurrentDay.c_encoding() + 7) % 7;
+// Query DB for seconds until the next scheduled run.
+// Returns nullopt on first-ever run; negative if overdue — clamped to 0.
+auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync");
+auto SecondsUntilNext = (DelayResult && *DelayResult)
+    ? std::max(**DelayResult, 0LL)
+    : 0LL;
+auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
 
 insights::core::scheduleRecurringTask(
     GitHubSyncTimer,
     "GitHubSync",
-    std::chrono::days(DaysUntilSat),   // initial delay
-    std::chrono::weeks(2),              // repeat interval
-    [&] {
-        insights::github::tasks::syncStats(**TasksDatabase, *Config);
+    InitialDelay,                  // DB-driven: resumes correct cycle after restart
+    std::chrono::weeks(2),         // repeat interval
+    [Config] {
+        insights::github::tasks::syncStats(*Config);
     }
 );
 ```
 
-The task calls `syncStats`, which makes HTTPS requests to the GitHub API and
-updates repository and account metrics in PostgreSQL.
+The task calls `syncStats`, which opens a fresh DB connection, makes HTTPS
+requests to the GitHub API, updates repository and account metrics in
+PostgreSQL, and records the run timestamp via `recordTaskRun("GitHubSync")`.
 
 ---
 
@@ -120,8 +123,15 @@ namespace insights::mymodule::tasks {
 
 static auto Log() { return spdlog::get("my_task"); }
 
-auto doWork(db::Database &Db, const core::Config &Config)
+auto doWork(const core::Config &Config)
     -> std::expected<void, core::Error> {
+    // Open a fresh connection — closed automatically at scope exit.
+    auto DatabaseResult = db::Database::connect(Config.DatabaseUrl);
+    if (!DatabaseResult) {
+        return std::unexpected(DatabaseResult.error());
+    }
+    auto &Database = **DatabaseResult;
+
     // ... your logic ...
     Log()->info("Done.");
     return {};
@@ -148,8 +158,8 @@ insights::core::scheduleRecurringTask(
     "MyTask",
     std::chrono::seconds(0),    // run immediately on startup
     std::chrono::hours(24),     // then once a day
-    [&] {
-        mymodule::tasks::doWork(*TasksDatabase, *Config);
+    [Config] {
+        mymodule::tasks::doWork(*Config);
     }
 );
 ```

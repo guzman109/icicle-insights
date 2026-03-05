@@ -82,33 +82,22 @@ int main() {
 
   // GitHub Metrics Sync Task
 
-  // Register Database Connection for Tasks
-  spdlog::info("Connecting to database.");
-  auto TasksDatabase = insights::db::Database::connect(Config->DatabaseUrl);
-  if (!TasksDatabase) {
-    spdlog::error(TasksDatabase.error().Message);
-    return 1;
-  }
+  // Query DB for seconds until the next scheduled run.
+  // Returns nullopt on first-ever run (no row yet); negative if overdue.
+  auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync");
+  auto SecondsUntilNext = (DelayResult && *DelayResult)
+      ? std::max(**DelayResult, 0LL)
+      : 0LL;
+  auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
 
   // Set Task Timer
   auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
-  // Needs to fire every other Sunday
-  auto Now = std::chrono::system_clock::now();
-  auto Today = std::chrono::floor<std::chrono::days>(Now);
-  std::chrono::weekday CurrentDay(Today);
-
-  auto DaysUntilSaturday = (6 - CurrentDay.c_encoding() + 7) % 7;
-  auto InitialDelay = std::chrono::days(DaysUntilSaturday);
-  auto Interval = std::chrono::weeks(2);
-
-  GitHubSyncTimer->expires_after(InitialDelay);
-
   // Schedule the task
-  spdlog::info("GitHubSync ready and running every 2 weeks on Sunday.");
+  spdlog::info("GitHubSync ready and running every 2 weeks on Saturday.");
   insights::core::scheduleRecurringTask(
-      GitHubSyncTimer, "GitHubSync", InitialDelay, std::chrono::weeks(2), [&] {
-        insights::github::tasks::syncStats(**TasksDatabase, *Config);
+      GitHubSyncTimer, "GitHubSync", InitialDelay, std::chrono::weeks(2), [Config] {
+        insights::github::tasks::syncStats(*Config);
       }
   );
 

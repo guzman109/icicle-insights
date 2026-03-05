@@ -1,33 +1,94 @@
 # =============================================================================
-# 1. GitHub Workers build the binary.
-# 2. Build the Docker Image and copy the prebuilt binary over.
-# 3. Push Image to Pods. 
+# Stage 1: Builder (Alpine)
+# Installs build dependencies and compiles the binary with Conan.
 # =============================================================================
-FROM ubuntu:24.04
+FROM alpine:3.23.3 AS builder
 
-RUN apt-get update && apt-get install -y \
-    libssl3 \
-    libpq5 \
-    libc++1-18 \
-    libc++abi1-18 \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+  autoconf \
+  automake \
+  bash \
+  ca-certificates \
+  ccache \
+  clang \
+  cmake \
+  curl \
+  git \
+  libc++-dev \
+  libpq-dev \
+  linux-headers \
+  llvm-libunwind-dev \
+  libtool \
+  lld \
+  make \
+  musl-dev \
+  ninja \
+  openssl-dev \
+  perl \
+  pkgconf \
+  py3-pip \
+  python3 \
+  tar \
+  unzip \
+  zip
+
+ENV CC=clang
+ENV CXX=clang++
+
+# Install Conan and auto-detect the build profile from the environment
+RUN pip3 install conan --break-system-packages \
+  && conan profile detect --force
+
+WORKDIR /src
+
+COPY conanfile.py .
+COPY conan-overlays/ conan-overlays/
+COPY . .
+
+# Conan packages live in the cache mount and must be visible to cmake, so both
+# steps share a single RUN. The ccache mount accelerates incremental rebuilds
+# when source files change but dependencies do not.
+RUN --mount=type=cache,target=/root/.conan2/p \
+    --mount=type=cache,target=/root/.cache/ccache \
+  conan create conan-overlays/libpq \
+  && conan install . --build=missing \
+    -s compiler.cppstd=gnu23 \
+    -s compiler.libcxx=libc++ \
+    --output-folder=/conan \
+  && cmake -B build -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE=/conan/conan_toolchain.cmake \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  && cmake --build build
+
+# =============================================================================
+# Stage 2: Runtime (Alpine)
+# Copies only the compiled binary — no compilers, no Conan, no source.
+# =============================================================================
+FROM alpine:3.23.3
+
+RUN apk add --no-cache \
+  ca-certificates \
+  curl \
+  libgcc \
+  libc++ \
+  libpq \
+  llvm-libunwind \
+  openssl
 
 WORKDIR /app
+COPY --from=builder /src/build/icicle-insights ./icicle-insights
 
-COPY dist/icicle-insights ./icicle-insights
-
-# Set up non-root user for security
-RUN chmod +x ./icicle-insights && \
-  useradd -m icicle && \
-  mkdir -p /app/logs && \
-  chown -R icicle:icicle /app
+RUN chmod +x ./icicle-insights \
+  && addgroup -S icicle \
+  && adduser -S -G icicle icicle \
+  && mkdir -p /app/logs \
+  && chown -R icicle:icicle /app
 USER icicle
 
-# Expose the default port (override with -e PORT=... at runtime)
 EXPOSE 5000
 
-# Health check — falls back to app default port if PORT is not set
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://${HOST:-localhost}:${PORT:-5000}/health || exit 1
 

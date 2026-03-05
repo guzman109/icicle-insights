@@ -1,6 +1,6 @@
 # Task Persistence
 
-**Status: Future Feature**
+**Status: Implemented**
 
 Persist cron task schedule state to PostgreSQL so the server resumes the correct
 firing time after a restart, instead of always triggering immediately on startup.

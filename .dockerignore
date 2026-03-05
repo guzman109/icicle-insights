@@ -6,6 +6,7 @@ build/
 .git/
 .gitignore
 .gitattributes
+.github/
 
 # Environment files
 .env
@@ -41,7 +42,6 @@ CLAUDE.md
 # Documentation
 docs/
 *.md
-!README.md
 
 # Development tools
 justfile
@@ -78,4 +78,6 @@ LICENSE
 
 memory/
 .gemini/
+
+
 

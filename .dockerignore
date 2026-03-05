@@ -75,3 +75,7 @@ example-env.txt
 test-apis.http
 schema.sql
 LICENSE
+
+memory/
+.gemini/
+

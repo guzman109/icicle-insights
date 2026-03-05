@@ -52,3 +52,7 @@ CMakePresets.json
 .claude/
 
 *.env.json
+
+memory/
+.gemini/
+

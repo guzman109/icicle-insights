@@ -85,16 +85,23 @@ int main() {
   // Query DB for seconds until the next scheduled run.
   // Returns nullopt on first-ever run (no row yet); negative if overdue.
   auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync");
+
+  // Calculate days until Thursday for the very first run
+  auto Now = std::chrono::system_clock::now();
+  auto Today = std::chrono::floor<std::chrono::days>(Now);
+  std::chrono::weekday CurrentDay(Today);
+  auto DaysUntilThursday = (4 - CurrentDay.c_encoding() + 7) % 7;
+
   auto SecondsUntilNext = (DelayResult && *DelayResult)
       ? std::max(**DelayResult, 0LL)
-      : 0LL;
+      : std::chrono::duration_cast<std::chrono::seconds>(std::chrono::days(DaysUntilThursday)).count();
   auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
 
   // Set Task Timer
   auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
   // Schedule the task
-  spdlog::info("GitHubSync ready and running every 2 weeks on Saturday.");
+  spdlog::info("GitHubSync ready and running every 2 weeks on Thursday.");
   insights::core::scheduleRecurringTask(
       GitHubSyncTimer, "GitHubSync", InitialDelay, std::chrono::weeks(2), [Config] {
         insights::github::tasks::syncStats(*Config);

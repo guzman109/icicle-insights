@@ -133,7 +133,7 @@ public:
     return withRetry("Database::querySecondsUntilNextRun", [this, TaskName]() -> std::optional<long long> {
       pqxx::work Tx(Cx);
       static constexpr std::string_view Query =
-          "SELECT EXTRACT(EPOCH FROM (next_run_at - NOW()))::bigint "
+          "SELECT EXTRACT(EPOCH FROM ((last_run_at + INTERVAL '2 weeks') - NOW()))::bigint "
           "FROM task_runs WHERE task_name = $1";
       auto Res = Tx.exec(pqxx::zview{Query}, pqxx::params{TaskName});
       if (Res.empty()) return std::nullopt;

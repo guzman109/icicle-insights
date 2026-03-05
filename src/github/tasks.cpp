@@ -267,7 +267,7 @@ auto syncStats(const core::Config &Config) -> std::expected<void, core::Error> {
     return AccountResult;
   }
 
-  // Record completion — Postgres regenerates next_run_at automatically.
+  // Record completion
   auto RecordResult = Database.recordTaskRun("GitHubSync");
   if (!RecordResult) {
     Log()->warn("recordTaskRun failed: {}", RecordResult.error().Message);

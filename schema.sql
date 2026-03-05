@@ -50,8 +50,7 @@ CREATE TABLE github_accounts (
 
 CREATE TABLE task_runs (
     task_name   TEXT        PRIMARY KEY,
-    last_run_at TIMESTAMPTZ NOT NULL,
-    next_run_at TIMESTAMPTZ GENERATED ALWAYS AS (last_run_at + INTERVAL '2 weeks') STORED
+    last_run_at TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE github_repositories (
@@ -68,3 +67,4 @@ CREATE TABLE github_repositories (
     deleted_at TIMESTAMPTZ,
     UNIQUE(name, account_id)
 );
+

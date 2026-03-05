@@ -24,14 +24,11 @@ left off instead of re-firing immediately.
 ```sql
 CREATE TABLE IF NOT EXISTS task_runs (
     task_name   TEXT        PRIMARY KEY,
-    last_run_at TIMESTAMPTZ NOT NULL,
-    next_run_at TIMESTAMPTZ GENERATED ALWAYS AS (last_run_at + INTERVAL '2 weeks') STORED
+    last_run_at TIMESTAMPTZ NOT NULL
 );
 ```
 
-`next_run_at` is a PostgreSQL generated column — the database recomputes it
-automatically whenever `last_run_at` is written. No application code needs to
-calculate the next fire time.
+We compute the next run time inline in our query: `(last_run_at + INTERVAL '2 weeks')`.
 
 ---
 
@@ -79,8 +76,7 @@ scheduleRecurringTask(Timer, "GitHubSync",
 Db.recordTaskRun("GitHubSync");
 ```
 
-Postgres writes `NOW()` to `last_run_at` and regenerates `next_run_at`
-automatically.
+Postgres writes `NOW()` to `last_run_at`.
 
 ---
 

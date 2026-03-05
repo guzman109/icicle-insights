@@ -92,7 +92,7 @@ just run          # start the server on http://localhost:3000
 
 ## Deployment
 
-The CI/CD pipeline (GitHub Actions) builds the binary on `ubuntu-24.04`, packages it into a Docker image, and pushes to GHCR.
+The CI/CD pipeline (GitHub Actions) packages the application into an Alpine Linux Docker image using Buildx and pushes to GHCR.
 
 ```bash
 # Pull and run the latest image
@@ -106,13 +106,16 @@ To publish a release, push a version tag:
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
-This triggers the full pipeline: build → Docker image → GitHub Release with binary tarball.
+This triggers the full pipeline: Docker image → GitHub Release with binary tarball extracted from the Alpine image.
 
 ### Local Docker build
 
 ```bash
-just docker-build   # build image locally
-just docker-run     # run with .env
+just build   # build image locally
+just run     # run with .env
+just start   # start existing container
+just stop    # stop container
+just rm      # remove container
 ```
 
 ## Development
@@ -121,14 +124,11 @@ just docker-run     # run with .env
 
 ```bash
 just deps          # Install Conan dependencies
-just setup         # Configure CMake
-just build         # Compile
-just run           # Run the server
-just full-build    # deps + setup + build
-just clean-build   # wipe build dir and rebuild
-
-just act-linux     # Test the linux CI job locally with act
-just act-build     # Test the docker CI job locally with act
+just cmake-setup   # Configure CMake
+just cmake-build   # Compile
+just local-run     # Run the server locally
+just cmake         # deps + cmake-setup + cmake-build
+just cmake-clean   # wipe build dir and rebuild
 ```
 
 ### Project Structure
@@ -149,7 +149,7 @@ just act-build     # Test the docker CI job locally with act
 │   └── workflows/
 │       └── build.yaml  # CI/CD: build → Docker → release
 ├── Dockerfile       # Runtime image (ubuntu:24.04)
-├── conanfile.txt    # Conan dependencies
+├── conanfile.py     # Conan dependencies
 ├── CMakeLists.txt   # Build configuration
 └── justfile         # Build command runner
 ```

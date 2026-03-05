@@ -53,4 +53,3 @@ stop:
 
 rm:
     docker rm insights
-

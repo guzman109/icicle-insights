@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
 );
 ```
 
-We compute the next run time inline in our query: `(last_run_at + INTERVAL '2 weeks')`.
+We compute the next run time inline in our query: `(last_run_at + $2::bigint * INTERVAL '1 second')`.
 
 ---
 
@@ -41,7 +41,7 @@ sequenceDiagram
     participant Task as syncStats()
 
     Note over App: Server startup
-    App->>DB: querySecondsUntilNextRun("GitHubSync")
+    App->>DB: querySecondsUntilNextRun("GitHubSync", SyncInterval)
     DB-->>App: seconds remaining (NULL if never ran)
     App->>App: clamp to 0 if overdue or NULL
     App->>App: scheduleRecurringTask(InitialDelay, 2 weeks)
@@ -57,7 +57,8 @@ sequenceDiagram
 ### On startup — compute `InitialDelay` from the DB
 
 ```cpp
-auto DelayResult = ServerDatabase->querySecondsUntilNextRun("GitHubSync");
+auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
+auto DelayResult = ServerDatabase->querySecondsUntilNextRun("GitHubSync", SyncInterval);
 
 // Clamp to 0 if overdue; default to 0 on first-ever run (NULL row)
 auto SecondsUntilNext = (DelayResult && *DelayResult)
@@ -111,13 +112,13 @@ Returns `std::nullopt` if the task has never run (no row yet):
 
 ```cpp
 std::expected<std::optional<long long>, core::Error>
-querySecondsUntilNextRun(std::string_view TaskName) {
+querySecondsUntilNextRun(std::string_view TaskName, std::chrono::seconds Interval) {
   try {
     pqxx::work Tx(Cx);
     static constexpr std::string_view Query =
-        "SELECT EXTRACT(EPOCH FROM (next_run_at - NOW()))::bigint "
+        "SELECT EXTRACT(EPOCH FROM ((last_run_at + $2::bigint * INTERVAL '1 second') - NOW()))::bigint "
         "FROM task_runs WHERE task_name = $1";
-    auto Res = Tx.exec(pqxx::zview{Query}, pqxx::params{TaskName});
+    auto Res = Tx.exec(pqxx::zview{Query}, pqxx::params{TaskName, Interval.count()});
     if (Res.empty()) return std::nullopt;
     return Res[0][0].as<long long>();
   } catch (const std::exception &Err) {
@@ -169,7 +170,7 @@ auto syncStats(const core::Config &Config) -> std::expected<void, core::Error> {
   if (auto R = updateRepositories(*ClientResult, Db, Config); !R) return R;
   if (auto R = updateAccounts(*ClientResult, Db, Config); !R) return R;
 
-  // Record completion — Postgres regenerates next_run_at automatically
+  // Record completion
   if (auto R = Db.recordTaskRun("GitHubSync"); !R) {
     Log()->warn("recordTaskRun failed: {}", R.error().Message);
   }

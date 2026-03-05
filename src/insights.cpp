@@ -84,7 +84,8 @@ int main() {
 
   // Query DB for seconds until the next scheduled run.
   // Returns nullopt on first-ever run (no row yet); negative if overdue.
-  auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync");
+  auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
+  auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync", SyncInterval);
 
   // Calculate days until Thursday for the very first run
   auto Now = std::chrono::system_clock::now();

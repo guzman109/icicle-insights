@@ -91,7 +91,8 @@ auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
 // Query DB for seconds until the next scheduled run.
 // Returns nullopt on first-ever run; negative if overdue — clamped to 0.
-auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync");
+auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
+auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync", SyncInterval);
 auto SecondsUntilNext = (DelayResult && *DelayResult)
     ? std::max(**DelayResult, 0LL)
     : 0LL;

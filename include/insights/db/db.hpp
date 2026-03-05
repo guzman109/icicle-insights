@@ -129,13 +129,13 @@ public:
   }
 
   std::expected<std::optional<long long>, core::Error>
-  querySecondsUntilNextRun(std::string_view TaskName) {
-    return withRetry("Database::querySecondsUntilNextRun", [this, TaskName]() -> std::optional<long long> {
+  querySecondsUntilNextRun(std::string_view TaskName, std::chrono::seconds Interval) {
+    return withRetry("Database::querySecondsUntilNextRun", [this, TaskName, Interval]() -> std::optional<long long> {
       pqxx::work Tx(Cx);
       static constexpr std::string_view Query =
-          "SELECT EXTRACT(EPOCH FROM ((last_run_at + INTERVAL '2 weeks') - NOW()))::bigint "
+          "SELECT EXTRACT(EPOCH FROM ((last_run_at + $2::bigint * INTERVAL '1 second') - NOW()))::bigint "
           "FROM task_runs WHERE task_name = $1";
-      auto Res = Tx.exec(pqxx::zview{Query}, pqxx::params{TaskName});
+      auto Res = Tx.exec(pqxx::zview{Query}, pqxx::params{TaskName, Interval.count()});
       if (Res.empty()) return std::nullopt;
       return Res[0][0].as<long long>();
     });

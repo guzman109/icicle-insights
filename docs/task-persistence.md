@@ -27,9 +27,33 @@ CREATE TABLE IF NOT EXISTS task_runs (
     task_name   TEXT        PRIMARY KEY,
     last_run_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS task_run_attempts (
+    id BIGSERIAL PRIMARY KEY,
+    task_name TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    status TEXT NOT NULL,
+    summary TEXT,
+    repositories_processed INT NOT NULL DEFAULT 0,
+    repositories_failed INT NOT NULL DEFAULT 0,
+    accounts_processed INT NOT NULL DEFAULT 0,
+    accounts_failed INT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_run_attempts_task_name_started_at
+    ON task_run_attempts(task_name, started_at DESC);
 ```
 
-The schema is intentionally minimal — one row per named task, storing only when it last ran. There is no `next_run_at` column because that would need to be kept in sync with any interval changes. Instead, the next run time is computed on the fly in SQL: `(last_run_at + $2::bigint * INTERVAL '1 second')`. The interval is always passed in at query time from the C++ constant, so changing the interval in code automatically changes the schedule with no schema migration.
+The scheduling table stays intentionally minimal — one row per named task,
+storing only the last successful run. Detailed attempt history lives in
+`task_run_attempts`, which captures failed and partial runs without affecting
+the next scheduled execution time. There is still no `next_run_at` column
+because that would need to be kept in sync with any interval changes. Instead,
+the next run time is computed on the fly in SQL:
+`(last_run_at + $2::bigint * INTERVAL '1 second')`. The interval is always
+passed in at query time from the C++ constant, so changing the interval in code
+automatically changes the schedule with no schema migration.
 
 `TIMESTAMPTZ` (timestamp with time zone) is used rather than bare `TIMESTAMP` so Postgres stores the value in UTC and converts correctly regardless of server timezone.
 
@@ -54,6 +78,7 @@ sequenceDiagram
     Task->>DB: Database::connect(Config.DatabaseUrl)
     Task->>DB: updateRepositories + updateAccounts
     Task->>DB: recordTaskRun("GitHubSync") → writes last_run_at=NOW()
+    Task->>DB: finishTaskRunAttempt(...) → stores success/partial/failure detail
     Task-->>-App: connection closes (RAII)
 ```
 
@@ -92,6 +117,22 @@ Db.recordTaskRun("GitHubSync");
 ```
 
 Postgres writes `NOW()` to `last_run_at`.
+
+### Also record attempt history
+
+Every task run now creates a row in `task_run_attempts`:
+
+- `running` when the attempt starts
+- `success` when everything completed cleanly
+- `partial_success` when some repo/account updates failed but the overall run completed
+- `failed` when the run aborted before completion
+- `skipped` when another instance already holds the advisory lock
+
+This makes it possible to answer:
+
+- did the timer actually fire?
+- was the run skipped due to another active instance?
+- did it fail early or complete partially?
 
 ---
 
@@ -237,6 +278,16 @@ between timer firings.
 
 The overhead of opening a PostgreSQL connection is negligible at a 2-week
 interval — connection setup takes a few milliseconds.
+
+## Multi-instance Safety
+
+`GitHubSync` now uses a PostgreSQL advisory lock keyed on the task name.
+
+That means:
+
+- one instance can run the task
+- other instances record a `skipped` attempt instead of running concurrently
+- only one runner updates `task_runs.last_run_at`
 
 ---
 

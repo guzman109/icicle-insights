@@ -6,6 +6,7 @@
 #include "insights/db/db.hpp"
 #include "insights/github/models.hpp"
 #include "insights/server/dependencies.hpp"
+#include "insights/github/tasks.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -18,7 +19,9 @@
 namespace insights::github {
 
 auto registerRoutes(
-    glz::http_router &Router, std::shared_ptr<db::Database> &Database
+    glz::http_router &Router,
+    std::shared_ptr<db::Database> &Database,
+    const core::Config &Config
 ) -> std::expected<void, core::Error> {
   using enum core::HttpStatus;
   spdlog::debug("Registering github accounts routes");
@@ -331,6 +334,45 @@ auto registerRoutes(
             .Forks = Result->Forks,
             .Stars = Result->Stars,
             .Views = Result->Views,
+        };
+        Response.status(static_cast<int>(Ok)).json(Output);
+      },
+      {.constraints = {{"id", server::dependencies::uuidConstraint()}}}
+  );
+
+  // Admin Sync Repo by ID
+  Router.post(
+      "/repos/:id/sync",
+      [Database, Config](const glz::request &Request, glz::response &Response) {
+        auto Id = Request.params.at("id");
+        spdlog::debug("POST /repos/{}/sync - Syncing repository", Id);
+        auto Result =
+            github::tasks::syncRepositoryById(Id, *Database, Config);
+        if (!Result) {
+          spdlog::error(
+              "POST /repos/{}/sync - Sync failed: {}",
+              Id,
+              Result.error().Message
+          );
+          Response.status(static_cast<int>(InternalServerError))
+              .json({{"error", Result.error().Message}});
+          return;
+        }
+
+        auto Output = SyncRepositoryResponse{
+            .Status = "success",
+            .Summary = std::format("Repository {} synced successfully.", Id),
+            .Repository =
+                OutputRepositorySchema{
+                    .Id = Result->Id,
+                    .Name = Result->Name,
+                    .AccountId = Result->AccountId,
+                    .Clones = Result->Clones,
+                    .Forks = Result->Forks,
+                    .Stars = Result->Stars,
+                    .Subscribers = Result->Subscribers,
+                    .Views = Result->Views,
+                },
         };
         Response.status(static_cast<int>(Ok)).json(Output);
       },

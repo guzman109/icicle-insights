@@ -1,5 +1,6 @@
 #pragma once
 #include "glaze/net/http_router.hpp"
+#include "insights/core/config.hpp"
 #include "insights/core/result.hpp"
 #include "insights/db/db.hpp"
 
@@ -42,8 +43,16 @@ struct OutputRepositorySchema {
   long long Views{0};
 };
 
+struct SyncRepositoryResponse {
+  std::string Status;
+  std::string Summary;
+  OutputRepositorySchema Repository;
+};
+
 auto registerRoutes(
-    glz::http_router &Router, std::shared_ptr<db::Database> &Database
+    glz::http_router &Router,
+    std::shared_ptr<db::Database> &Database,
+    const core::Config &Config
 ) -> std::expected<void, core::Error>;
 
 } // namespace insights::github

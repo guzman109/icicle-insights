@@ -17,6 +17,7 @@
 #include <functional>
 #include <glaze/net/http_router.hpp>
 #include <glaze/net/http_server.hpp>
+#include <insights/core/timestamp.hpp>
 #include <memory>
 #include <string_view>
 #include <system_error>
@@ -66,7 +67,9 @@ int main() {
   spdlog::info("GitHubRoutes");
   glz::http_router GitHubRouter;
 
-  if (!insights::github::registerRoutes(GitHubRouter, ServerDatabase.value())) {
+  if (!insights::github::registerRoutes(
+          GitHubRouter, ServerDatabase.value(), *Config
+      )) {
     spdlog::error("Failed registering git routes.");
   }
 
@@ -100,6 +103,10 @@ int main() {
   auto SecondsUntilNext =
       *DelayResult ? std::max(**DelayResult, 0LL) : 0LL;
   auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
+  auto NextRunAt =
+      insights::core::formatTimestamp(
+          std::chrono::system_clock::now() + InitialDelay
+      );
 
   if (*DelayResult) {
     spdlog::info(
@@ -117,8 +124,9 @@ int main() {
 
   // Schedule the task
   spdlog::info(
-      "GitHubSync ready. Initial delay: {}s. Repeat interval: {}s.",
+      "GitHubSync ready. Initial delay: {}s. Next run at: {}. Repeat interval: {}s.",
       InitialDelay.count(),
+      NextRunAt,
       SyncInterval.count()
   );
   insights::core::scheduleRecurringTask(

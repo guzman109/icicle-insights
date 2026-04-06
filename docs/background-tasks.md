@@ -100,6 +100,7 @@ auto SecondsUntilNext = (DelayResult && *DelayResult)
     ? std::max(**DelayResult, 0LL)
     : 0LL;
 auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
+auto NextRunAt = formatTimestamp(std::chrono::system_clock::now() + InitialDelay);
 
 insights::core::scheduleRecurringTask(
     GitHubSyncTimer,
@@ -110,6 +111,8 @@ insights::core::scheduleRecurringTask(
         auto Result = insights::github::tasks::syncStats(*Config);
         if (!Result) {
             spdlog::get("github_sync")->error("GitHubSync failed: {}", Result.error().Message);
+        } else {
+            spdlog::get("github_sync")->info("GitHubSync finished successfully.");
         }
     }
 );
@@ -117,7 +120,17 @@ insights::core::scheduleRecurringTask(
 
 The task calls `syncStats`, which opens a fresh DB connection for that run, makes HTTPS
 requests to the GitHub API, updates repository and account metrics in
-PostgreSQL, and records the run timestamp via `recordTaskRun("GitHubSync")`.
+PostgreSQL, records the run timestamp via `recordTaskRun("GitHubSync")`, and
+stores per-attempt detail in `task_run_attempts`.
+
+### Task status and admin trigger
+
+Current operational endpoints:
+
+- `GET /tasks/github-sync` — returns last successful run, last attempt
+  status/summary, processed vs failed counts, and computed next run
+- `POST /api/github/repos/:id/sync` — sync one repository immediately by ID
+  using the same GitHub fetch/update logic as the scheduled task
 
 ---
 
@@ -194,11 +207,12 @@ cleanly. In-flight task calls are allowed to finish before `join()` returns.
 ## Error Handling
 
 Task functions return `std::expected<void, core::Error>`. The scheduler wrapper
-does not inspect the return value — tasks are responsible for logging errors
-internally and deciding whether to continue or abort.
+logs failed results and the GitHub sync path records detailed attempt metadata
+for `success`, `partial_success`, `failed`, and `skipped` outcomes.
 
 The `github::tasks::syncStats` pipeline uses `continue` for per-repository API
-failures so one bad response doesn't abort the whole batch.
+failures so one bad response doesn't abort the whole batch. Those partial
+failures are now recorded in `task_run_attempts` instead of being invisible.
 
 ---
 

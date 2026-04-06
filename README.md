@@ -71,6 +71,7 @@ just run          # start the server on http://localhost:3000
 |--------|------|-------------|
 | `GET` | `/health` | Database connectivity check |
 | `GET` | `/routes` | List all registered routes |
+| `GET` | `/tasks/github-sync` | GitHub sync task status, last attempt details, and next run timing |
 
 ### GitHub Accounts
 
@@ -88,6 +89,7 @@ just run          # start the server on http://localhost:3000
 | `GET` | `/api/github/repos` | List all repositories |
 | `POST` | `/api/github/repos` | Create a repository |
 | `GET` | `/api/github/repos/:id` | Get repository by ID |
+| `POST` | `/api/github/repos/:id/sync` | Sync one repository from GitHub immediately |
 | `DELETE` | `/api/github/repos/:id` | Delete repository |
 
 ## Deployment

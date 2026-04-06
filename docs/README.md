@@ -155,7 +155,19 @@ tail -f /path/to/logs/github_sync.log
 ```
 
 The GitHub sync resumes from the persisted schedule when `task_runs` has a previous run.
-On the first-ever startup, it waits until the next Thursday before firing.
+If there is no successful prior run, or the last success is already overdue by
+two weeks or more, it runs immediately on startup.
+
+Use `GET /tasks/github-sync` to inspect:
+
+- last successful run
+- last attempt status and summary
+- processed vs failed counts
+- computed next run time
+
+Use `POST /api/github/repos/:id/sync` to trigger an immediate single-repository
+sync. In this repo there is no built-in auth layer, so this endpoint assumes
+your upstream authn/authz controls access.
 
 ### Route Not Found
 

@@ -53,6 +53,22 @@ CREATE TABLE task_runs (
     last_run_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE task_run_attempts (
+    id BIGSERIAL PRIMARY KEY,
+    task_name TEXT NOT NULL,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    finished_at TIMESTAMPTZ,
+    status TEXT NOT NULL,
+    summary TEXT,
+    repositories_processed INT NOT NULL DEFAULT 0,
+    repositories_failed INT NOT NULL DEFAULT 0,
+    accounts_processed INT NOT NULL DEFAULT 0,
+    accounts_failed INT NOT NULL DEFAULT 0
+);
+
+CREATE INDEX idx_task_run_attempts_task_name_started_at
+    ON task_run_attempts(task_name, started_at DESC);
+
 CREATE TABLE github_repositories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
@@ -67,4 +83,3 @@ CREATE TABLE github_repositories (
     deleted_at TIMESTAMPTZ,
     UNIQUE(name, account_id)
 );
-

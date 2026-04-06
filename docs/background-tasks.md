@@ -90,9 +90,12 @@ Registered in `src/insights.cpp`:
 auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
 // Query DB for seconds until the next scheduled run.
-// Returns nullopt on first-ever run; negative if overdue — clamped to 0.
+// Returns nullopt on first-ever run; negative if overdue — both run immediately.
 auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
 auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync", SyncInterval);
+if (!DelayResult) {
+    // fail startup; scheduling state could not be loaded
+}
 auto SecondsUntilNext = (DelayResult && *DelayResult)
     ? std::max(**DelayResult, 0LL)
     : 0LL;
@@ -101,15 +104,18 @@ auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
 insights::core::scheduleRecurringTask(
     GitHubSyncTimer,
     "GitHubSync",
-    InitialDelay,                  // DB-driven: resumes correct cycle after restart
+    InitialDelay,                  // immediate if never run or overdue; otherwise wait remaining time
     std::chrono::weeks(2),         // repeat interval
     [Config] {
-        insights::github::tasks::syncStats(*Config);
+        auto Result = insights::github::tasks::syncStats(*Config);
+        if (!Result) {
+            spdlog::get("github_sync")->error("GitHubSync failed: {}", Result.error().Message);
+        }
     }
 );
 ```
 
-The task calls `syncStats`, which opens a fresh DB connection, makes HTTPS
+The task calls `syncStats`, which opens a fresh DB connection for that run, makes HTTPS
 requests to the GitHub API, updates repository and account metrics in
 PostgreSQL, and records the run timestamp via `recordTaskRun("GitHubSync")`.
 

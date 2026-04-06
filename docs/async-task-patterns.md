@@ -545,8 +545,8 @@ namespace insights::core {
 template <typename T>
 class AsyncTask {
 public:
-  using TaskFunc = std::function<Result<T>()>;
-  using CompletionHandler = std::function<void(Result<T>)>;
+  using TaskFunc = std::function<std::expected<T, Error>()>;
+  using CompletionHandler = std::function<void(std::expected<T, Error>)>;
 
   AsyncTask(asio::thread_pool &Pool, TaskFunc Task)
       : Pool(Pool), Task(std::move(Task)) {}
@@ -646,10 +646,10 @@ graph LR
 // Add async variants alongside sync methods
 class Database {
   // Sync (current)
-  Result<Platform> get(const std::string &Id);
+  std::expected<Platform, Error> get(const std::string &Id);
 
   // Async (future)
-  asio::awaitable<Result<Platform>> getAsync(const std::string &Id);
+  asio::awaitable<std::expected<Platform, Error>> getAsync(const std::string &Id);
 };
 ```
 

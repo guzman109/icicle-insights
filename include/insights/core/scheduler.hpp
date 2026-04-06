@@ -26,9 +26,9 @@ namespace insights::core {
 //   core::scheduleRecurringTask(
 //       GitHubSyncTimer,
 //       "GitHub sync",
-//       std::chrono::seconds(0),
+//       InitialDelay,
 //       std::chrono::weeks(2),
-//       [&] { github::tasks::syncStats(*TasksDatabase, *Config); });
+//       [Config] { github::tasks::syncStats(*Config); });
 void scheduleRecurringTask(
     std::shared_ptr<asio::steady_timer> Timer,
     std::string_view Name,

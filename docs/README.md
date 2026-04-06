@@ -11,8 +11,10 @@ Reference documentation for contributing to ICICLE Insights.
 | [http-client-guide.md](http-client-guide.md) | Building reusable HTTP clients with SSL, connection pooling, and caching |
 | [async-task-patterns.md](async-task-patterns.md) | Five async patterns from thread pools to C++20 coroutines |
 | [logging.md](logging.md) | Per-component named loggers, log file layout, and log configuration |
+| [database-reconnect.md](database-reconnect.md) | Automatic retry and exponential backoff for lost database connections |
+| [database-connection-pool.md](database-connection-pool.md) | Why the current shared pqxx connection is unsafe and how to refactor to a pool |
 | [tls-guide.md](tls-guide.md) | Configuring SSL/TLS for outbound HTTP client requests |
-| [task-persistence.md](task-persistence.md) | Future: persisting task run history and results to the database |
+| [task-persistence.md](task-persistence.md) | Persisting task run history so recurring work resumes on schedule after restart |
 
 ## Quick Reference
 
@@ -21,11 +23,11 @@ Reference documentation for contributing to ICICLE Insights.
 ```cpp
 #include "insights/core/result.hpp"
 
-// Return a Result<T> from any function that can fail
-Result<MyModel> fetchSomething(std::string_view Id) {
+// Return std::expected<T, core::Error> from any function that can fail
+std::expected<MyModel, core::Error> fetchSomething(std::string_view Id) {
     auto Row = Db->get<MyModel>(Id);
     if (!Row) {
-        return std::unexpected(Error{.Message = Row.error().Message});
+        return std::unexpected(core::Error{.Message = Row.error().Message});
     }
     return *Row;
 }
@@ -45,13 +47,16 @@ if (!Entry) {
 
 ```cpp
 // github/routes.cpp
-Router.on<glz::GET>("/api/github/accounts/:id", [Db](glz::request& Req) {
-    auto Id    = Req.params["id"];
-    auto Entry = Db->get<github::Account>(Id);
+Router.get("/accounts/:id", [Database](const glz::request &Request, glz::response &Response) {
+    auto Id = Request.params.at("id");
+    auto Entry = Database->get<github::models::Account>(Id);
     if (!Entry) {
-        return glz::response{HttpStatus::NotFound, Entry.error().Message};
+        Response.status(static_cast<int>(core::HttpStatus::InternalServerError))
+            .json({{"error", Entry.error().Message}});
+        return;
     }
-    return glz::response{HttpStatus::Ok, *Entry};
+    Response.status(static_cast<int>(core::HttpStatus::Ok))
+        .json(OutputAccountSchema{.Id = Entry->Id, .Name = Entry->Name, .Followers = Entry->Followers});
 });
 ```
 
@@ -93,7 +98,7 @@ See the project [CLAUDE.md](../CLAUDE.md) for environment variable configuration
 3. **Schema** — add input/output schema structs to `<module>/routes.hpp` if the endpoint
    accepts or returns JSON.
 4. **Handler** — implement the lambda in `src/<module>/routes.cpp`.
-5. **Registration** — call `Router.on<METHOD>(path, handler)` inside `registerRoutes`.
+5. **Registration** — call `Router.get(...)`, `Router.post(...)`, `Router.patch(...)`, or `Router.del(...)` inside `registerRoutes`.
 6. **CMakeLists.txt** — add any new `.cpp` files to the executable sources, then re-run
    `just setup`.
 
@@ -126,7 +131,7 @@ Additional rules:
 | Decision | Rationale |
 |----------|-----------|
 | `std::expected` instead of exceptions | Zero-cost on the happy path; explicit error handling at every boundary |
-| Two database connections | Sync tasks hold transactions for seconds; a dedicated connection prevents blocking route handlers |
+| Startup DB for routes + per-run DB for tasks | Route handlers reuse one startup connection; background sync opens a fresh connection each run to avoid stale idle connections |
 | Shared io_context, `Server.start(0)` | One thread pool for HTTP and timers; clean shutdown via `IOContext->stop()` |
 | `scheduleRecurringTask` free function | No scheduler class to maintain; timer ownership is explicit via `shared_ptr<steady_timer>` |
 | Per-component named loggers | Isolates log output per subsystem; `server.log` and `github_sync.log` can be tailed independently |
@@ -149,9 +154,8 @@ set, only stdout is used. Tail the log during a sync run:
 tail -f /path/to/logs/github_sync.log
 ```
 
-The GitHub sync fires immediately on startup (`InitialDelay = seconds(0)`), so any
-misconfiguration (bad token, network issue) will appear in the log within seconds of starting
-the server.
+The GitHub sync resumes from the persisted schedule when `task_runs` has a previous run.
+On the first-ever startup, it waits until the next Thursday before firing.
 
 ### Route Not Found
 

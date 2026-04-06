@@ -1,11 +1,11 @@
 #include "insights/core/config.hpp"
 #include "insights/core/logging.hpp"
+#include "insights/core/routes.hpp"
 #include "insights/core/scheduler.hpp"
 #include "insights/db/db.hpp"
 #include "insights/github/routes.hpp"
 #include "insights/github/tasks.hpp"
 #include "insights/server/middleware/logging.hpp"
-#include "insights/core/routes.hpp"
 
 #include "spdlog/spdlog.h"
 
@@ -84,28 +84,56 @@ int main() {
 
   // Query DB for seconds until the next scheduled run.
   // Returns nullopt on first-ever run (no row yet); negative if overdue.
-  auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
-  auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun("GitHubSync", SyncInterval);
+  auto SyncInterval =
+      std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
+  auto DelayResult = ServerDatabase.value()->querySecondsUntilNextRun(
+      "GitHubSync", SyncInterval
+  );
+  if (!DelayResult) {
+    spdlog::error(
+        "Failed to query next GitHubSync run time: {}",
+        DelayResult.error().Message
+    );
+    return 1;
+  }
 
-  // Calculate days until Thursday for the very first run
-  auto Now = std::chrono::system_clock::now();
-  auto Today = std::chrono::floor<std::chrono::days>(Now);
-  std::chrono::weekday CurrentDay(Today);
-  auto DaysUntilThursday = (4 - CurrentDay.c_encoding() + 7) % 7;
-
-  auto SecondsUntilNext = (DelayResult && *DelayResult)
-      ? std::max(**DelayResult, 0LL)
-      : std::chrono::duration_cast<std::chrono::seconds>(std::chrono::days(DaysUntilThursday)).count();
+  auto SecondsUntilNext =
+      *DelayResult ? std::max(**DelayResult, 0LL) : 0LL;
   auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
+
+  if (*DelayResult) {
+    spdlog::info(
+        "GitHubSync last successful run leaves {}s until next execution.",
+        **DelayResult
+    );
+  } else {
+    spdlog::info(
+        "GitHubSync has no recorded successful run. Scheduling immediate execution."
+    );
+  }
 
   // Set Task Timer
   auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);
 
   // Schedule the task
-  spdlog::info("GitHubSync ready and running every 2 weeks on Thursday.");
+  spdlog::info(
+      "GitHubSync ready. Initial delay: {}s. Repeat interval: {}s.",
+      InitialDelay.count(),
+      SyncInterval.count()
+  );
   insights::core::scheduleRecurringTask(
-      GitHubSyncTimer, "GitHubSync", InitialDelay, std::chrono::weeks(2), [Config] {
-        insights::github::tasks::syncStats(*Config);
+      GitHubSyncTimer,
+      "GitHubSync",
+      InitialDelay,
+      std::chrono::weeks(2),
+      [Config] {
+        auto Result = insights::github::tasks::syncStats(*Config);
+        if (!Result) {
+          spdlog::get("github_sync")
+              ->error("GitHubSync failed: {}", Result.error().Message);
+        } else {
+          spdlog::get("github_sync")->info("GitHubSync finished successfully.");
+        }
       }
   );
 

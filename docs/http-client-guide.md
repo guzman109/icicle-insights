@@ -441,6 +441,10 @@ so you can never forget to unlock.
 
 ### Using the Manager in `syncStats`
 
+This section is a future-oriented example. The current codebase does not use a
+long-lived `ClientManager`; `syncStats(const core::Config&)` creates a fresh
+`glz::http_client` per run.
+
 Update `syncStats` to accept a manager:
 
 ```cpp
@@ -467,15 +471,14 @@ auto syncStats(
 
 ```cpp
 // src/insights.cpp
-insights::github::ClientManager GitHubClients;
-
-// In the timer callback:
-auto Result = insights::github::tasks::syncStats(
-    GitHubClients, *TasksDatabase, *Config);
+// In the current codebase, the timer callback is:
+[Config] {
+  insights::github::tasks::syncStats(*Config);
+}
 ```
 
-The manager lives at application scope, so the cache survives between
-timer firings.
+If a manager is introduced later, it should live at application scope so the
+cache survives between timer firings.
 
 ---
 

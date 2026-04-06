@@ -3,19 +3,20 @@
 **Status: Implemented**
 
 Persist cron task schedule state to PostgreSQL so the server resumes the correct
-firing time after a restart, instead of always triggering immediately on startup.
+firing time after a restart, while still running immediately on startup when the
+task has never succeeded before or is already overdue by at least the full
+two-week interval.
 
 ---
 
 ## Problem
 
 `scheduleRecurringTask` always uses whatever `InitialDelay` is passed at startup.
-Currently that delay is computed from the current weekday, so every restart
-re-computes "days until next Saturday" — which is correct for the first-ever run
-but ignores whether the task already ran this cycle.
+Without persistence, every restart would either run immediately or use some
+hard-coded rule unrelated to the last successful sync.
 
 After implementing this feature, a restart mid-cycle will resume from where it
-left off instead of re-firing immediately.
+left off instead of re-firing too early.
 
 ---
 
@@ -28,7 +29,9 @@ CREATE TABLE IF NOT EXISTS task_runs (
 );
 ```
 
-We compute the next run time inline in our query: `(last_run_at + $2::bigint * INTERVAL '1 second')`.
+The schema is intentionally minimal — one row per named task, storing only when it last ran. There is no `next_run_at` column because that would need to be kept in sync with any interval changes. Instead, the next run time is computed on the fly in SQL: `(last_run_at + $2::bigint * INTERVAL '1 second')`. The interval is always passed in at query time from the C++ constant, so changing the interval in code automatically changes the schedule with no schema migration.
+
+`TIMESTAMPTZ` (timestamp with time zone) is used rather than bare `TIMESTAMP` so Postgres stores the value in UTC and converts correctly regardless of server timezone.
 
 ---
 
@@ -43,7 +46,7 @@ sequenceDiagram
     Note over App: Server startup
     App->>DB: querySecondsUntilNextRun("GitHubSync", SyncInterval)
     DB-->>App: seconds remaining (NULL if never ran)
-    App->>App: clamp to 0 if overdue or NULL
+    App->>App: clamp to 0 if overdue or missing
     App->>App: scheduleRecurringTask(InitialDelay, 2 weeks)
 
     Note over Task: Timer fires
@@ -56,11 +59,22 @@ sequenceDiagram
 
 ### On startup — compute `InitialDelay` from the DB
 
+The result from `querySecondsUntilNextRun` has three possible states:
+- `std::nullopt` — no row exists yet (task has never run) → run immediately
+- negative value — interval has passed, task is overdue → fire immediately (clamped to 0)
+- positive value — task ran recently, N seconds remain → wait that long
+
+### On startup — compute `InitialDelay` from the DB
+
 ```cpp
 auto SyncInterval = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::weeks(2));
 auto DelayResult = ServerDatabase->querySecondsUntilNextRun("GitHubSync", SyncInterval);
 
-// Clamp to 0 if overdue; default to 0 on first-ever run (NULL row)
+if (!DelayResult) {
+  return 1; // fail startup if schedule state can't be read
+}
+
+// Clamp to 0 if overdue; default to 0 on first-ever run
 auto SecondsUntilNext = (DelayResult && *DelayResult)
     ? std::max(**DelayResult, 0LL)
     : 0LL;
@@ -187,11 +201,11 @@ Replace the weekday-calculation block with a DB-driven delay, and remove the
 separate `TasksDatabase` connection entirely:
 
 ```cpp
-// Replace the current weekday calculation with this:
-auto DelayResult = ServerDatabase->querySecondsUntilNextRun("GitHubSync");
-auto SecondsUntilNext = (DelayResult && *DelayResult)
-    ? std::max(**DelayResult, 0LL)
-    : 0LL;
+auto DelayResult = ServerDatabase->querySecondsUntilNextRun("GitHubSync", SyncInterval);
+if (!DelayResult) {
+  return 1;
+}
+auto SecondsUntilNext = *DelayResult ? std::max(**DelayResult, 0LL) : 0LL;
 auto InitialDelay = std::chrono::seconds(SecondsUntilNext);
 
 auto GitHubSyncTimer = std::make_shared<asio::steady_timer>(*IOContext);

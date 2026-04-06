@@ -48,18 +48,15 @@ src/
 ### Error Handling
 
 The project uses C++23 `std::expected<T, E>` throughout. The `Error` struct in
-`include/insights/core/result.hpp` carries a single `string Message` field. Route handlers and
-database operations return `Result<T>` (aliased to `std::expected<T, Error>`) and propagate
-errors without throwing exceptions.
+`include/insights/core/result.hpp` carries a single `string Message` field. Route handlers,
+database operations, and task functions return `std::expected<..., core::Error>` directly and
+propagate errors without throwing exceptions.
 
 ```cpp
 // core/result.hpp
 struct Error {
     std::string Message;
 };
-
-template <typename T>
-using Result = std::expected<T, Error>;
 ```
 
 Callers use monadic operations (`and_then`, `transform`, `or_else`) or check `.has_value()`
@@ -73,22 +70,21 @@ if (!Account) {
 ```
 
 No exceptions cross API boundaries. Database functions, HTTP client calls, and task functions all
-return `Result<T>` or `void` with logged errors.
+return `std::expected<..., core::Error>` or `void` with logged errors.
 
 ### Database Connection Management
 
 The `Database` struct in `db/db.hpp` wraps a `pqxx::connection` and exposes generic CRUD
-operations. Two separate `shared_ptr<Database>` instances are created at startup: one for HTTP
-route handlers (`ServerDatabase`) and one for background sync tasks (`TasksDatabase`). Keeping
-them separate avoids contention between request handling and long-running sync operations.
+operations. One shared `ServerDatabase` connection is created at startup for HTTP route handlers.
+Background sync tasks open a fresh `Database` connection inside each timer firing instead of
+holding a long-lived `TasksDatabase` for weeks at a time.
 
 ```cpp
-auto ServerDatabase = std::make_shared<db::Database>(Config.DatabaseUrl);
-auto TasksDatabase  = std::make_shared<db::Database>(Config.DatabaseUrl);
+auto ServerDatabase = db::Database::connect(Config.DatabaseUrl);
 ```
 
 Route handlers capture `ServerDatabase` by value through lambda closures registered with the
-router. Task functions receive `TasksDatabase` as a parameter.
+router. Task functions receive `Config` and connect on demand when they run.
 
 ### HTTP Routing
 
@@ -97,19 +93,23 @@ function that takes the router and a database connection:
 
 ```cpp
 // github/routes.hpp
-void registerRoutes(glz::router& Router, std::shared_ptr<db::Database> Db);
+auto registerRoutes(glz::http_router &Router, std::shared_ptr<db::Database> &Database)
+    -> std::expected<void, core::Error>;
 ```
 
-Handlers are lambdas that capture the database pointer and return a `glz::response`:
+Handlers are lambdas that capture the database pointer and write into a `glz::response`:
 
 ```cpp
-Router.on<glz::GET>(/api/github/accounts/:id, [Db](glz::request& Req) {
-    auto Id    = Req.params[id];
-    auto Entry = Db->get<github::Account>(Id);
+Router.get("/accounts/:id", [Database](const glz::request &Request, glz::response &Response) {
+    auto Id = Request.params.at("id");
+    auto Entry = Database->get<github::models::Account>(Id);
     if (!Entry) {
-        return glz::response{HttpStatus::NotFound, Entry.error().Message};
+        Response.status(static_cast<int>(core::HttpStatus::InternalServerError))
+            .json({{"error", Entry.error().Message}});
+        return;
     }
-    return glz::response{HttpStatus::Ok, *Entry};
+    Response.status(static_cast<int>(core::HttpStatus::Ok))
+        .json(OutputAccountSchema{.Id = Entry->Id, .Name = Entry->Name, .Followers = Entry->Followers});
 });
 ```
 
@@ -137,20 +137,21 @@ constrains template parameters to types that have a `DbTraits` specialization.
 
 ```cpp
 template <DbEntity T>
-Result<T> get(std::string_view Id);
+std::expected<T, core::Error> get(std::string_view Id);
 
 template <DbEntity T>
-Result<std::vector<T>> list();
+std::expected<std::vector<T>, core::Error> getAll();
 
 template <DbEntity T>
-Result<T> create(const T& Entity);
+std::expected<T, core::Error> create(const T& Entity);
 
 template <DbEntity T>
-Result<void> remove(std::string_view Id);
+std::expected<T, core::Error> remove(std::string_view Id);
 ```
 
-Adding support for a new model requires only a `DbTraits<MyModel>` specialization — no new
-database functions.
+Adding support for a new model requires only a `DbTraits<MyModel>` specialization — no new database functions.
+
+This pattern uses templates + specializations rather than a base class + inheritance because the operations need to work with **concrete types** at the call site (`get<Account>()` returns an `Account`, not a `BaseModel`). With inheritance, all methods would return pointers to a base class and callers would need to downcast. Templates give you the same code reuse with zero runtime overhead and full type safety — the compiler generates the right code for each `T` at compile time, guided by the `DbTraits` specialization for that type.
 
 ### Background Task Scheduler
 
@@ -202,11 +203,11 @@ Server.start(0);  // 0 = no internal threads; use our io_context
 
 scheduleRecurringTask(
     SyncTimer,
-    github_sync,
-    seconds(0),           // fire immediately on startup
+    "GitHubSync",
+    InitialDelay,         // DB resume if known, otherwise next Thursday
     weeks(2),             // repeat every two weeks
-    [TasksDatabase, &Config]() {
-        github::tasks::syncStats(TasksDatabase, Config);
+    [Config]() {
+        github::tasks::syncStats(*Config);
     }
 );
 
@@ -248,6 +249,8 @@ erDiagram
 - **Account** — a GitHub organization or user. Fields include `Id`, `Name`, `Url`, `Followers`.
 - **Repository** — a tracked repository belonging to an account. Fields include `Id`, `Name`,
   `Url`, `AccountId`, plus metrics columns (stars, forks, clones, views, subscribers).
+
+The two-level hierarchy (Account → Repository) reflects GitHub's own structure: repositories always belong to an owner (org or user). Storing the `AccountId` foreign key on each repository means you can query all repos for a given org without a join across unrelated tables, and deleting an account can cascade to its repositories cleanly.
 
 Only the `github/` module is active. The `ghcr/` module directory exists as a placeholder for
 future container registry support.
@@ -297,7 +300,7 @@ which are also driven by the same `io_context`.
 | Decision | Rationale |
 |----------|-----------|
 | `std::expected` instead of exceptions | Zero-cost on the happy path; forces callers to handle errors explicitly at API boundaries |
-| Two database connections | Prevents long-running sync tasks from blocking request handlers |
+| Startup DB for routes + per-run DB for tasks | Keeps request handling simple while avoiding stale idle task connections |
 | Shared io_context for server and timers | Single thread pool serves both HTTP and scheduled tasks; no extra threads or synchronization |
 | `Server.start(0)` with manual thread pool | Full control over concurrency; threads are joined on shutdown for a clean exit |
 | Free function scheduler, no class | Simpler than a scheduler object; ownership is explicit via the `shared_ptr<steady_timer>` |

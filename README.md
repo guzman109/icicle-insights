@@ -148,7 +148,7 @@ just cmake-clean   # wipe build dir and rebuild
 ├── .github/
 │   └── workflows/
 │       └── build.yaml  # CI/CD: build → Docker → release
-├── Dockerfile       # Runtime image (ubuntu:24.04)
+├── Dockerfile       # Multi-stage Alpine builder/runtime image
 ├── conanfile.py     # Conan dependencies
 ├── CMakeLists.txt   # Build configuration
 └── justfile         # Build command runner
@@ -170,16 +170,17 @@ LLVM naming conventions throughout:
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| asio | 1.36.0 | Async I/O, timers, thread pool |
-| openssl | — | TLS for outbound HTTP requests |
-| glaze | main | HTTP server, router, JSON |
-| libpqxx | 7.10.5 | PostgreSQL C++ client |
-| spdlog | 1.17.0 | Structured logging |
+| [asio](https://conan.io/center/recipes/asio) | 1.36.0 | Async I/O, timers, thread pool |
+| [openssl](https://www.openssl.org/) | system | TLS for outbound HTTP requests |
+| [glaze](https://conan.io/center/recipes/glaze) | 7.1.0 | HTTP server, router, JSON |
+| [libpqxx](https://conan.io/center/recipes/libpqxx) | 7.10.5 | PostgreSQL C++ client |
+| [spdlog](https://conan.io/center/recipes/spdlog) | 1.17.0 | Structured logging |
 
 ## Documentation
 
 - [Architecture](docs/architecture.md) — module structure, core patterns, data model, design decisions
 - [Developer Guide](docs/README.md) — how to add routes, tasks, loggers; debugging tips
+- [Database Reconnect](docs/database-reconnect.md) — automatic retry and exponential backoff for lost connections
 
 ## License
 

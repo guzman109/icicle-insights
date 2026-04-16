@@ -34,7 +34,7 @@ which means `docker logs` always captures output even without a volume mount.
 
 ## Setup
 
-`setupLogging` and `createLogger` are intentionally separate. `setupLogging` runs once at startup and creates the `server` logger plus the shared stdout sink that all loggers will share. `createLogger` is called once per task and wires that task's named logger into the same shared sink. Keeping them separate means the server logger is ready before any task loggers exist, and adding a new task logger never touches the server's setup.
+`setupLogging` and `createLogger` are intentionally separate. `setupLogging` runs once at startup and creates the `server` logger plus the shared stdout sink that all loggers will share. `createLogger` is then used to register additional named loggers, such as `github_sync`, into the same shared sink set. Keeping them separate means the server logger is ready before any task loggers exist, and adding a new task logger never touches the server's setup.
 
 `setupLogging` is called once in `main()` after `Config::load()`. It creates
 the `server` logger and registers it as the spdlog default:
@@ -71,6 +71,8 @@ static auto Log() { return spdlog::get("my_task"); }
 ```
 
 That's it — `{LOG_DIR}/my_task.log` is created automatically on the next run.
+
+Register each logger name once during startup. The current helper unconditionally calls `spdlog::register_logger(...)`, so re-registering the same name later would need additional guarding logic.
 
 ---
 

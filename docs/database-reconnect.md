@@ -109,18 +109,20 @@ if (!ServerDatabase) {
 
 Background tasks follow the same pattern, creating their own connection at the start of each run (see [background-tasks.md](background-tasks.md)).
 
-## Two Connections
+## Current Connection Topology
 
-The server maintains two independent `Database` instances:
+The server currently uses two database access patterns:
 
 | Instance | Owner | Purpose |
 |----------|-------|---------|
-| `ServerDatabase` | HTTP route handlers | Short-lived queries per request |
-| Task-local connection | Background sync tasks | Long-running transactions during sync |
+| `ServerDatabase` | HTTP route handlers | Shared server-side connection used by request handlers |
+| Task-local connection | Background sync tasks | Fresh connection opened at the start of each sync run |
 
-A single shared connection would create a problem: `pqxx::connection` is not thread-safe. If an HTTP request and the background sync task tried to use it simultaneously, the result would be undefined behaviour. Keeping them separate means each thread owns its connection exclusively — no locking needed, and a reconnect in one does not affect the other.
+The task-local connection is a good fit for the background sync job: it opens at the start of the run and closes at scope exit (RAII), which avoids holding an idle connection open for the two weeks between runs.
 
-The sync task opens its connection at the start of each run and closes it at scope exit (RAII). This avoids holding an idle connection open for the two weeks between runs, which firewalls and connection poolers (PgBouncer) would silently drop.
+The HTTP-side connection is more problematic. The current implementation shares one `ServerDatabase` across request handlers, and that `Database` owns a single `pqxx::connection`. Since `pqxx::connection` is not thread-safe, this is a known concurrency risk in the current server design when multiple requests hit the database at the same time.
+
+So the reconnect logic described in this guide is accurate, but the surrounding connection ownership model is **not** yet ideal. A future connection-per-request or connection-pool design would make the retry behavior safer in a multithreaded server.
 
 ## Log Output
 
@@ -134,3 +136,9 @@ All reconnect activity is logged through spdlog. Set `LOG_LEVEL=debug` in `.env`
 ...
 [error] Database::get - Connection lost, no retries left: ...
 ```
+
+## Operational Caveat
+
+The current retry implementation uses `std::this_thread::sleep_for(...)` during backoff. In the current server architecture, that means a worker thread can be blocked during reconnect waits. This is acceptable for a small system, but it is not free: repeated reconnect attempts can reduce request-serving capacity while the backoff is in progress.
+
+A future async backoff strategy or dedicated DB executor would improve this.

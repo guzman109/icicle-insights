@@ -35,50 +35,27 @@ The `ca-certificates` package provides the trusted root certificate bundle neede
 
 ### Basic HTTPS Client Configuration
 
-When using `glz::http_client` to make HTTPS requests, you need to configure the SSL context.
-
-**Using Config (Recommended):**
+The current implementation uses Glaze's built-in certificate discovery:
 
 ```cpp
 #include <glaze/net/http_client.hpp>
-#include <asio/ssl.hpp>
-#include <spdlog/spdlog.h>
-#include <system_error>
-#include "core/config.hpp"
-
-// Load config with SSL_CERT_FILE from environment
-auto Config = insights::core::Config::load();
+#include "insights/core/result.hpp"
 
 glz::http_client Client;
 
-// Configure SSL to use system certificates
-Client.configure_ssl_context([&Config](auto& Ctx) {
-    std::error_code Ec;
+auto Ok = Client.configure_system_ca_certificates();
+if (!Ok) {
+    return std::unexpected(
+        insights::core::Error{"Error: Could not find CA certificates."}
+    );
+}
 
-    // Use SSL_CERT_FILE from config if set
-    if (Config->SslCertFile) {
-        Ctx.load_verify_file(*Config->SslCertFile, Ec);
-        if (Ec) {
-            spdlog::warn("Failed to load CA certificates from SSL_CERT_FILE ({}): {}",
-                         *Config->SslCertFile, Ec.message());
-        }
-    }
-
-    // Fall back to default paths if not set or failed
-    if (!Config->SslCertFile || Ec) {
-        Ctx.set_default_verify_paths(Ec);
-        if (Ec) {
-            spdlog::warn("Failed to set default verify paths: {}", Ec.message());
-        }
-    }
-
-    // Enable certificate verification (recommended for production)
-    Ctx.set_verify_mode(asio::ssl::verify_peer);
-});
-
-// Make HTTPS request
 auto Response = Client.get("https://api.github.com/repos/foo/bar", Headers);
 ```
+
+This is the path used by the GitHub sync task today. It delegates certificate lookup to the underlying TLS stack and environment rather than loading a certificate path from `Config`.
+
+**Important:** the current `Config` struct does **not** contain an `SslCertFile` field. If you want first-class application-managed certificate configuration, that needs to be implemented explicitly.
 
 **Direct Hardcoded Path (Not Recommended):**
 
@@ -97,7 +74,7 @@ Client.configure_ssl_context([](auto& Ctx) {
 
 ### Configuration via Environment Variable
 
-The recommended way to configure certificate paths is via the `SSL_CERT_FILE` environment variable:
+One common way to influence certificate discovery is via the `SSL_CERT_FILE` environment variable:
 
 ```bash
 # In .env file
@@ -111,7 +88,7 @@ export SSL_CERT_FILE=/opt/homebrew/etc/ca-certificates/cert.pem
 just run
 ```
 
-The application will automatically load this from `Config.SslCertFile` and use it for HTTPS requests.
+In the current implementation, this is **not** loaded through `Config`. Instead, the underlying TLS/certificate loading path may consult it when `configure_system_ca_certificates()` runs.
 
 ### Certificate Bundle Locations by Platform
 

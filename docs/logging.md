@@ -25,7 +25,7 @@ When `LOG_DIR` is set, each component writes to its own rotating file:
   github_sync.log  ← GitHub sync task: API calls, DB updates, errors
 ```
 
-Each file rotates at **10 MB** and keeps **3** rotated copies (30 MB max per component).
+Each file rotates at **10 MB** and keeps **3** rotated copies (30 MB max per component). These limits exist to bound disk usage on long-running servers — a sync task that logs heavily during a large GitHub crawl won't fill the disk.
 
 All loggers also write to **stdout** regardless of whether `LOG_DIR` is set,
 which means `docker logs` always captures output even without a volume mount.
@@ -33,6 +33,8 @@ which means `docker logs` always captures output even without a volume mount.
 ---
 
 ## Setup
+
+`setupLogging` and `createLogger` are intentionally separate. `setupLogging` runs once at startup and creates the `server` logger plus the shared stdout sink that all loggers will share. `createLogger` is called once per task and wires that task's named logger into the same shared sink. Keeping them separate means the server logger is ready before any task loggers exist, and adding a new task logger never touches the server's setup.
 
 `setupLogging` is called once in `main()` after `Config::load()`. It creates
 the `server` logger and registers it as the spdlog default:
@@ -74,9 +76,9 @@ That's it — `{LOG_DIR}/my_task.log` is created automatically on the next run.
 
 ## Architecture
 
-All loggers share a single `stdout_color_sink_mt` instance (via `consoleSink()`
-in `logging.hpp`). This avoids interleaved output on the terminal since spdlog
-sinks are individually thread-safe.
+All loggers share a single `stdout_color_sink_mt` instance (via `consoleSink()` in `logging.hpp`). The `_mt` suffix means "multi-threaded" — the sink holds an internal mutex so concurrent log calls from different threads are serialized. If each logger had its own sink, two threads could write to stdout simultaneously and their output would interleave mid-line. One shared sink prevents that.
+
+Per-component loggers (one per subsystem) give you the ability to tail a single component's output in isolation (`github_sync.log`) without wading through unrelated server traffic — useful when debugging a sync run while the HTTP server is also active.
 
 ```mermaid
 graph TD
@@ -110,6 +112,4 @@ docker run \
   icicle-insights
 ```
 
-The `insights` user owns `/app/logs` in the image, so no permission issues.
-Without the `-v` mount, logs still write inside the container but are lost
-when it stops.
+The `insights` user owns `/app/logs` in the image, so no permission issues arise when the container writes files there. Without the `-v` mount, logs still write inside the container but are lost when it stops — which is fine for ephemeral deployments where stdout (`docker logs`) is the primary log stream, but not for production environments where you need log history across restarts.

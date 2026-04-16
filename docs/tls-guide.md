@@ -115,6 +115,8 @@ The application will automatically load this from `Config.SslCertFile` and use i
 
 ### Certificate Bundle Locations by Platform
 
+Each OS ships and manages its own trusted CA bundle. These paths differ because Linux distributions and macOS each have their own package management conventions — there's no cross-platform standard location. The `SSL_CERT_FILE` env var exists precisely to avoid hardcoding any one path.
+
 | Platform | Certificate Path |
 |----------|-----------------|
 | macOS (Homebrew) | `/opt/homebrew/etc/ca-certificates/cert.pem` |
@@ -235,10 +237,12 @@ SslContext.set_options(
 
 ### Certificate Files
 
-Two files are required:
+Two files are required because TLS uses **asymmetric cryptography** — a key pair where one half is public and one half is private:
 
-1. **Certificate Chain (`cert.pem`)**: Your certificate + intermediate certificates
-2. **Private Key (`key.pem`)**: Your private key (keep secure!)
+1. **Certificate Chain (`cert.pem`)**: Your certificate + intermediate certificates. This is **public** — it's sent to every client that connects so they can verify your identity. It contains your public key, signed by a CA the client trusts.
+2. **Private Key (`key.pem`)**: The other half of the key pair. This is **secret** — it proves you own the certificate. It never leaves the server.
+
+The chain file includes intermediate certificates because clients only have root CAs pre-installed. The chain builds a trust path: `your cert → intermediate CA → root CA (trusted by client)`.
 
 **Important:** Never commit private keys to version control. Use environment variables or secure key management:
 

@@ -16,6 +16,8 @@ deps:
     conan install . --build=missing --output-folder={{ CONAN_DEPS_DIR }} -s compiler.cppstd=gnu23
 
 # Configure CMake build
+setup: cmake-setup
+
 cmake-setup:
     cmake -B {{ BUILD_DIR }} \
           -DCMAKE_TOOLCHAIN_FILE={{ CONAN_DEPS_DIR }}/conan_toolchain.cmake \
